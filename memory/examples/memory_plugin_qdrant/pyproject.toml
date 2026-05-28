@@ -1,0 +1,28 @@
+[project]
+name = "memory-plugin-qdrant"
+version = "0.1.0"
+description = "示例:第三方 VectorStore 插件,演示 entry_points 接入 memory_app(管理面)"
+requires-python = ">=3.11"
+readme = "README.md"
+
+dependencies = [
+# 真实 Qdrant 客户端在生产中应该是 'qdrant-client>=1.7'.
+# 此示例保留依赖最小化,使用进程内 dict 模拟向量索引,
+# 主仓 CI 可在不依赖外部服务的前提下运行契约测试。
+"memory-service",
+]
+
+# entry_points:Memory Service 启动时通过 importlib.metadata.entry_points
+# 自动 discover (`memory_app.plugins` group),把下方 class 加入 PluginRegistry。
+# 用户**只需**改 default.yaml 把 memory.storage.vector.name 切到 qdrant_store
+# 即可生效,业务代码零改动。
+[project.entry-points."memory_app.plugins"]
+qdrant_store = "memory_plugin_qdrant.store:QdrantVectorStore"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["memory_plugin_qdrant*"]

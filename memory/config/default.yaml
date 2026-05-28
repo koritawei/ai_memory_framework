@@ -1,0 +1,261 @@
+defaults:
+memory:
+generation:
+boundary_detector:
+name: rule_sbd
+params:
+time_gap_min: 30
+max_window_size: 20
+max_window_tokens: 512
+llm_fallback: false
+episode_extractor:
+name: llm_episode_extractor
+params:
+prompt_id_assistant: episode_extraction
+prompt_id_group: episode_extraction_group_chat
+default_scenario: group_chat
+semantic_extractor:
+name: llm_10_association
+params:
+prompt_id: semantic_extraction
+min_items: 0
+max_items: 20
+clusterer:
+name: incremental_centroid
+params:
+similarity_threshold: 0.65
+time_gap_days: 7
+max_scene_size: 50
+max_scenes_per_group: 256
+entity_extractor:
+name: regex_entity_extractor
+params:
+min_length: 2
+max_entities_per_text: 20
+lifecycle:
+reinforcer:
+name: synaptic_plasticity_reinforcer
+params:
+eta: 0.3
+lambda_per_day: 0.01
+s_max: 5.0
+forgetting_policy:
+name: ebbinghaus_v1
+params:
+s_base: 4.0
+threshold_forget: 0.15
+importance_scorer:
+name: fsfm_4d
+params:
+w_cqa: 0.25
+w_bve: 0.3
+w_trs: 0.25
+w_src: 0.2
+trs_half_life_days: 30.0
+consolidator:
+name: composite
+params:
+update_threshold: 0.85
+supersede_threshold: 0.93
+noop_threshold: 0.97
+w_jaccard: 0.4
+w_cosine: 0.6
+enable_sheaf: false
+enable_llm_fallback: false
+consolidation_strategy:
+name: three_phase
+params:
+light:
+enabled: true
+cron: 0 */6 * * *
+deep:
+enabled: true
+cron: 0 3 * * *
+rem:
+enabled: true
+cron: 0 5 * * 0
+capacity_optimizer:
+name: greedy
+params:
+safety_margin: 0.1
+danger_threshold: -10.0
+retrieval:
+over_fetch_factor: 4
+channels:
+bm25:
+name: bm25_es
+enabled: true
+params:
+index_name: memory_mem_cells
+text_field: text
+over_fetch_factor: 4
+vector:
+name: vector_milvus
+enabled: true
+params:
+metric_type: COSINE
+nprobe: 16
+over_fetch_factor: 4
+output_fields:
+- mem_cell_id
+- text
+- memory_type
+entity:
+name: entity_boost
+enabled: false
+params:
+top_k_lookup: 200
+graph:
+name: graph_traversal
+enabled: false
+params:
+max_depth: 2
+fuser:
+name: weighted_rrf
+params:
+k: 60
+weights:
+bm25: 0.4
+vector: 0.6
+reranker:
+name: mmr
+params:
+mmr_lambda: 0.7
+enable_cross_encoder: false
+filter:
+name: threshold
+params:
+threshold: 0.0
+prompts:
+episode_extraction:
+description: 默认情景提取(对齐内置种子)
+version: 1.0.0
+tags:
+- generation
+- episode
+variables:
+- text
+template: '你是一个善于结构化记忆提取的助手。
+
+从以下对话中提取情景记忆,以 JSON 数组形式返回。
+
+每条情景记忆包含字段:
+
+- summary: 不超过 50 字的概括
+
+- event_time: 事件发生时间(YYYY-MM-DD,无法判定填 null)
+
+- key_entities: 涉及的关键实体名称列表
+
+- emotional_valence: 情绪倾向 [-1.0, 1.0]
+
+- importance: 重要性 [0, 1]
+
+对话内容:
+
+{text}
+
+仅返回 JSON,不要任何解释文字。
+
+'
+variants:
+- match:
+tenant_id_in:
+- acme
+description: Acme 企业专用情景提取
+template: '你是 Acme 企业助手。请从以下对话中提取符合 Acme 业务术语
+
+的情景记忆。
+
+对话:
+
+{text}
+
+返回 JSON 数组,字段同默认版本,但需额外标注 ``business_unit``。
+
+'
+episode_extraction_group_chat:
+description: 群组对话情景提取
+version: 1.0.0
+tags:
+- generation
+- episode
+- group_chat
+variables:
+- text
+- participants
+template: "你是一个善于结构化记忆提取的助手。\n以下是一段群组对话,从中提取情景记忆。\n特别注意:每条记忆需标注主要参与者(participants\
+\ 字段)。\n\n对话内容:\n{text}\n\n参与者列表:{participants}\n\n返回 JSON 数组,每条情景含:\n-\
+\ summary, event_time, key_entities, participants,\n emotional_valence,\
+\ importance\n\n仅返回 JSON。\n"
+semantic_extraction:
+description: 语义记忆归纳
+version: 1.0.0
+tags:
+- generation
+- semantic
+variables:
+- summary
+- entities
+template: '从以下情景摘要与实体中归纳语义记忆(去情境化的事实/偏好/目标)。
+
+情景摘要:
+
+{summary}
+
+涉及实体:
+
+{entities}
+
+返回 JSON 数组,每条语义记忆含:
+
+- content: 自然语言陈述
+
+- knowledge_type: knowledge / fact / preference / goal
+
+- confidence: 置信度 [0, 1]
+
+- start_time / end_time: 时间有效期(可空)
+
+仅返回 JSON。
+
+'
+sbd_llm_refine:
+description: SBD LLM 边界细化
+version: 1.0.0
+tags:
+- generation
+- sbd
+variables:
+- numbered_text
+template: '以下是按时间排序的对话片段(每行带行号)。
+
+判断从第几行开始话题切换,返回 JSON:
+
+{{"boundary_index": <int>, "reasoning": "<简短说明>", "confidence": <0-1>}}
+
+如果整段都属于同一话题,返回 ``{{"boundary_index": -1, ...}}``。
+
+对话片段:
+
+{numbered_text}
+
+'
+storage:
+graph_store:
+name: in_memory_lru_graph
+params:
+max_nodes_per_user: 4096
+max_edges_per_user: 8192
+global_overrides:
+memory.retrieval.fuser:
+name: weighted_rrf
+params:
+k: 90
+memory.retrieval.reranker:
+name: mmr
+params:
+mmr_lambda: 0.55
+enable_cross_encoder: false
+tenant_overrides: {}
+user_overrides: {}

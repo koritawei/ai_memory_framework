@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Memory Service —— 启动期不可变配置（Settings 来源）
+# ─────────────────────────────────────────────────────────────────────────────
+# 优先级（高 → 低）：环境变量 (MEMORY_*) > 本文件 > （无）
+# 仅承载启动期不可变项；运行时可调参数走 ConfigCenter（config/default.yaml）。
+# 详见「单一事实源」原则。
+#
+# 重定向：可通过环境变量 MEMORY_BOOTSTRAP_FILE 指向其他路径
+# 例：MEMORY_BOOTSTRAP_FILE=/etc/memory/bootstrap.prod.yaml uv run uvicorn ...
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── 服务 ──
+app_name: "Memory Service"
+debug: false
+
+# ── MongoDB ──
+mongo_uri: "mongodb://localhost:27017"
+mongo_db: "memory"
+
+# ── Elasticsearch ──
+es_hosts:
+- "http://localhost:9200"
+es_index_prefix: "memory"
+
+# ── Milvus ──
+milvus_host: "localhost"
+milvus_port: 19530
+milvus_collection: "memory_vectors"
+
+# ── Redis ──
+redis_url: "redis://localhost:6379/0"
+
+# ── 配置中心后端选择（启动期决定，不可热改）──
+config_center_backend: "file" # file | mongo
+config_center_file_path: "config/default.yaml"
+
+# ── 鉴权 ──
+auth_enabled: false
+admin_api_key: null # null = 未配置；为非空字符串时启用 X-Admin-Key 校验
+
+# ── 启动行为 ──
+discover_entry_point_plugins: true
+plugin_entry_point_group: "memory_app.plugins"
+
+# ── 健康检查行为 ──
+strict_readiness: false # true 时，外部依赖任一失败即 /health/ready=fail
