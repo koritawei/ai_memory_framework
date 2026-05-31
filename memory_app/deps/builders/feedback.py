@@ -38,7 +38,13 @@ class FeedbackLifecycleBuilder(ServiceBuilder):
             )
             return
 
-        mongo_repo = MongoMemCellRepo(state.clients.mongo_db)
+        mongo_repo = state.mongo_repo
+        if mongo_repo is None and state.clients.mongo_db is not None:
+            mongo_repo = MongoMemCellRepo(state.clients.mongo_db)
+            state.mongo_repo = mongo_repo
+        if mongo_repo is None:
+            logger.warning("feedback_service skipped: mongo unavailable")
+            return
 
         state.feedback_service = FeedbackService(
             mongo_repo=mongo_repo, reinforcer=reinforcer

@@ -145,10 +145,12 @@ def create_app() -> FastAPI:
         description="AI Memory 系统 —— 分层认知记忆架构（Phase 0）",
         lifespan=lifespan,
     )
-    # 后添加 = 更外层；Metrics 最外以统计 401/429
+    # 后添加 = 更外层（请求先经过）。
+    # 期望链路: Metrics → RequestId → BusinessAuth → RateLimit → TenantBinding → 路由
+    # BusinessAuth 必须在 RateLimit 之前，限流才能按 identity 分桶而非仅 IP。
     app.add_middleware(TenantBindingMiddleware)
-    app.add_middleware(_BusinessAuthMiddleware)
     app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(_BusinessAuthMiddleware)
     app.add_middleware(_RequestIdMiddleware)
     if settings.metrics_enabled:
         app.add_middleware(MetricsMiddleware)

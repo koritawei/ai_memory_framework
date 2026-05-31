@@ -66,9 +66,83 @@ async def test_reconcile_dry_run_does_not_remove():
     )
     report = await rec.reconcile(limit=10, dry_run=True)
     assert report["succeeded"] == 0
+    assert report["failed"] == 0
+    assert report["dry_run_count"] == 1
     assert report["details"][0]["status"] == "dry_run"
     assert await dlq.size() == 1
     assert es.indexed == []
+
+
+class _ScopedMongo:
+    def __init__(self, cells: dict[str, MemCell]):
+        self._cells = cells
+        self.scoped_calls: list[tuple[str, str, str]] = []
+
+    async def get_by_id(self, mid: str):
+        return self._cells.get(mid)
+
+    async def get_by_id_scoped(self, mid: str, *, tenant_id: str, user_id: str):
+        self.scoped_calls.append((mid, tenant_id, user_id))
+        cell = self._cells.get(mid)
+        if cell is None:
+            return None
+        if cell.tenant_id != tenant_id or cell.user_id != user_id:
+            return None
+        return cell
+
+
+@pytest.mark.asyncio
+async def test_reconcile_uses_scoped_lookup_when_extra_present():
+    cell = MemCell(
+        tenant_id="t1", user_id="u1", session_id="s1", text="hello", state=MemoryState.ACTIVE
+    )
+    dlq = InMemoryDLQ()
+    await dlq.enqueue(
+        DLQRecord(
+            target="es",
+            mem_cell_id=cell.mem_cell_id,
+            error="timeout",
+            extra={"tenant_id": "t1", "user_id": "u1"},
+        )
+    )
+    mongo = _ScopedMongo({cell.mem_cell_id: cell})
+    es = _FakeES()
+    rec = SyncReconciler(
+        dlq=dlq,
+        mongo_repo=mongo,
+        es_repo=es,
+        milvus_repo=None,
+    )
+    report = await rec.reconcile(limit=10)
+    assert report["succeeded"] == 1
+    assert mongo.scoped_calls == [(cell.mem_cell_id, "t1", "u1")]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_deduplicates_same_target_and_id():
+    cell = MemCell(
+        tenant_id="t1", user_id="u1", session_id="s1", text="hello", state=MemoryState.ACTIVE
+    )
+    dlq = InMemoryDLQ()
+    await dlq.enqueue(
+        DLQRecord(target="es", mem_cell_id=cell.mem_cell_id, error="e1", retry_count=0)
+    )
+    await dlq.enqueue(
+        DLQRecord(target="es", mem_cell_id=cell.mem_cell_id, error="e2", retry_count=1)
+    )
+    es = _FakeES()
+    rec = SyncReconciler(
+        dlq=dlq,
+        mongo_repo=_FakeMongo({cell.mem_cell_id: cell}),
+        es_repo=es,
+        milvus_repo=None,
+        max_parallel=4,
+    )
+    report = await rec.reconcile(limit=10)
+    assert report["scanned"] == 1
+    assert report["succeeded"] == 1
+    assert es.indexed.count(cell.mem_cell_id) == 1
+    assert await dlq.size() == 0
 
 
 @pytest.mark.asyncio

@@ -2,17 +2,58 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Any
+from typing import Any, Protocol
 
+from memory_app.internal_models import MemCell
 from memory_app.middleware.metrics import (
     DLQ_RECONCILE_FAILED,
     DLQ_RECONCILE_SUCCEEDED,
     DLQ_SIZE,
 )
-from memory_app.repositories.dlq import DLQRecord
+from memory_app.repositories.dlq import DLQProto, DLQRecord
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_MAX_PARALLEL = 8
+_STATS_SAMPLE_LIMIT = 10_000
+
+
+def _dedupe_records(records: list[DLQRecord]) -> list[DLQRecord]:
+    """同一 (target, mem_cell_id) 只保留 retry_count 最高的一条。
+
+    DLQ 可能因多次写入失败产生重复项；并发 reconcile 若不去重，
+    会对同一 cell 并行重试并重复 bump_retry。
+    """
+    by_key: dict[tuple[str, str], DLQRecord] = {}
+    for rec in records:
+        key = (rec.target, rec.mem_cell_id)
+        prev = by_key.get(key)
+        if prev is None or rec.retry_count >= prev.retry_count:
+            by_key[key] = rec
+    return list(by_key.values())
+
+
+class _MongoReadProto(Protocol):
+    async def get_by_id(self, mem_cell_id: str) -> MemCell | None: ...
+
+    async def get_by_id_scoped(
+        self, mem_cell_id: str, *, tenant_id: str, user_id: str
+    ) -> MemCell | None: ...
+
+
+class _ESIndexProto(Protocol):
+    async def index(self, cell: MemCell) -> None: ...
+
+
+class _MilvusInsertProto(Protocol):
+    async def insert(
+        self,
+        mem_cell_id: str,
+        embedding: list[float],
+        metadata: dict[str, str] | None,
+    ) -> None: ...
 
 
 class SyncReconciler:
@@ -21,26 +62,28 @@ class SyncReconciler:
     def __init__(
         self,
         *,
-        dlq: Any,
-        mongo_repo: Any,
-        es_repo: Any | None,
-        milvus_repo: Any | None,
+        dlq: DLQProto,
+        mongo_repo: _MongoReadProto,
+        es_repo: _ESIndexProto | None,
+        milvus_repo: _MilvusInsertProto | None,
         max_retries: int = 5,
+        max_parallel: int = _DEFAULT_MAX_PARALLEL,
     ) -> None:
         self._dlq = dlq
         self._mongo_repo = mongo_repo
         self._es_repo = es_repo
         self._milvus_repo = milvus_repo
         self._max_retries = max(1, int(max_retries))
+        self._parallel_sem = asyncio.Semaphore(max(1, int(max_parallel)))
 
     async def stats(self) -> dict[str, Any]:
         total = await self._dlq.size()
         DLQ_SIZE.set(total)
         by_target: dict[str, int] = {}
-        for target in ("es", "milvus", "background_task", "redis_task", "cold_path"):
-            items = await self._dlq.list(target=target, limit=10_000)
-            if items:
-                by_target[target] = len(items)
+        # 单次拉取样本聚合，避免对每个 target 各发一次大 limit 查询
+        sample = await self._dlq.list(limit=_STATS_SAMPLE_LIMIT)
+        for rec in sample:
+            by_target[rec.target] = by_target.get(rec.target, 0) + 1
         return {"total": total, "by_target": by_target}
 
     async def list_records(
@@ -55,7 +98,7 @@ class SyncReconciler:
         limit: int = 100,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        records = await self._dlq.list(target=target, limit=limit)
+        records = _dedupe_records(await self._dlq.list(target=target, limit=limit))
         result = {
             "dry_run": dry_run,
             "scanned": len(records),
@@ -63,10 +106,16 @@ class SyncReconciler:
             "failed": 0,
             "skipped": 0,
             "exhausted": 0,
+            "dry_run_count": 0,
             "details": [],
         }
-        for rec in records:
-            detail = await self._reconcile_one(rec, dry_run=dry_run)
+
+        async def _guarded(rec: DLQRecord) -> dict:
+            async with self._parallel_sem:
+                return await self._reconcile_one(rec, dry_run=dry_run)
+
+        details = await asyncio.gather(*(_guarded(rec) for rec in records))
+        for detail in details:
             result["details"].append(detail)
             status = detail["status"]
             if status == "ok":
@@ -75,10 +124,25 @@ class SyncReconciler:
                 result["skipped"] += 1
             elif status == "exhausted":
                 result["exhausted"] += 1
+            elif status == "dry_run":
+                result["dry_run_count"] += 1
             else:
                 result["failed"] += 1
         await self.stats()
         return result
+
+    async def _load_cell(self, rec: DLQRecord) -> MemCell | None:
+        extra = rec.extra or {}
+        tenant_id = extra.get("tenant_id")
+        user_id = extra.get("user_id")
+        scoped_get = getattr(self._mongo_repo, "get_by_id_scoped", None)
+        if tenant_id and user_id and callable(scoped_get):
+            return await scoped_get(
+                rec.mem_cell_id,
+                tenant_id=str(tenant_id),
+                user_id=str(user_id),
+            )
+        return await self._mongo_repo.get_by_id(rec.mem_cell_id)
 
     async def _reconcile_one(self, rec: DLQRecord, *, dry_run: bool) -> dict:
         base = {
@@ -96,7 +160,7 @@ class SyncReconciler:
                 "error": f"unsupported target: {rec.target}",
             }
 
-        cell = await self._mongo_repo.get_by_id(rec.mem_cell_id)
+        cell = await self._load_cell(rec)
         if cell is None:
             return {**base, "status": "skipped", "error": "mem_cell not found in mongo"}
 
@@ -134,15 +198,11 @@ class SyncReconciler:
                 rec.mem_cell_id,
                 err,
             )
-            bump = getattr(self._dlq, "bump_retry", None)
-            if callable(bump):
-                await bump(rec.target, rec.mem_cell_id, error=err)
+            await self._dlq.bump_retry(rec.target, rec.mem_cell_id, error=err)
             DLQ_RECONCILE_FAILED.labels(target=rec.target).inc()
             return {**base, "status": "failed", "error": err}
 
-        remove = getattr(self._dlq, "remove", None)
-        if callable(remove):
-            await remove(rec.target, rec.mem_cell_id)
+        await self._dlq.remove(rec.target, rec.mem_cell_id)
         DLQ_RECONCILE_SUCCEEDED.labels(target=rec.target).inc()
         return {**base, "status": "ok", "error": ""}
 
@@ -155,11 +215,9 @@ def build_reconciler_from_state(state: Any) -> SyncReconciler | None:
     milvus_repo = None
     ingest = state.ingest_service
     if ingest is not None:
-        pipeline = getattr(ingest, "_pipeline", None)
-        sync_stage = getattr(pipeline, "_sync_stage", None) if pipeline else None
-        if sync_stage is not None:
-            es_repo = getattr(sync_stage, "_es_repo", None)
-            milvus_repo = getattr(sync_stage, "_milvus_repo", None)
+        sync_repos = getattr(ingest, "sync_index_repos", None)
+        if callable(sync_repos):
+            es_repo, milvus_repo = sync_repos()
     if es_repo is None and state.clients.es_client is not None:
         from memory_app.repositories.es_repo import ESMemCellRepo
 

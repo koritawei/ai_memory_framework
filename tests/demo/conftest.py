@@ -174,6 +174,8 @@ class FakeMongoRepo:
         delta: float,
         s_max: float,
         increment_access: bool,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
     ) -> dict | None:
         """**关键 fake**:模拟服务端 ``find_one_and_update`` + aggregation $set。
 
@@ -185,6 +187,10 @@ class FakeMongoRepo:
         self.atomic_calls.append((mem_cell_id, delta, s_max, increment_access))
         cell = self.store.get(mem_cell_id)
         if cell is None:
+            return None
+        if tenant_id is not None and cell.tenant_id != tenant_id:
+            return None
+        if user_id is not None and cell.user_id != user_id:
             return None
         # 真实 Mongo 在 $set 阶段一气呵成;Python 端按序执行模拟原子性
         cell.strength = min(s_max, float(cell.strength) + float(delta))

@@ -175,12 +175,15 @@ class Settings(BaseSettings):
     dlq_backend: Literal["memory", "mongo", "redis"]
     task_runner_backend: Literal["asyncio", "redis"]
     task_queue_key: str
+    task_runner_max_concurrent: int
+    cold_path_max_parallel: int
 
     # ── 可观测 / 限流 ──
     metrics_enabled: bool
     rate_limit_enabled: bool
     rate_limit_rpm: int
     rate_limit_backend: Literal["memory", "redis"]
+    rate_limit_fail_open: bool
 
     # ── DLQ Reconciler ──
     dlq_reconcile_interval_s: int

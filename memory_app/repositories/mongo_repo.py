@@ -89,6 +89,22 @@ class MongoMemCellRepo:
         doc.pop("_id", None)
         return MemCell.model_validate(doc)
 
+    async def get_by_id_scoped(
+        self, mem_cell_id: str, *, tenant_id: str, user_id: str
+    ) -> MemCell | None:
+        """按主键 + 租户/用户作用域查;不存在或不匹配返回 None。"""
+        doc = await self.collection.find_one(
+            {
+                "mem_cell_id": mem_cell_id,
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+            }
+        )
+        if doc is None:
+            return None
+        doc.pop("_id", None)
+        return MemCell.model_validate(doc)
+
     async def get_by_ids(self, mem_cell_ids: list[str]) -> list[MemCell]:
         """批量查 —— 一次 ``{$in:[…]}`` 替代 N 次 ``find_one``。
 
@@ -152,6 +168,8 @@ class MongoMemCellRepo:
         delta: float,
         s_max: float,
         increment_access: bool,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
     ) -> dict | None:
         """原子化地应用 ``strength += delta``(裁剪到 ``s_max``)与可选 ``access++``。
 
@@ -178,19 +196,26 @@ class MongoMemCellRepo:
                 "$add": [{"$ifNull": ["$access_count", 0]}, 1]
             }
         pipeline = [{"$set": sets}]
+        filt: dict[str, Any] = {"mem_cell_id": mem_cell_id}
+        if tenant_id is not None:
+            filt["tenant_id"] = tenant_id
+        if user_id is not None:
+            filt["user_id"] = user_id
         coll = self.collection
         if hasattr(coll, "find_one_and_update"):
             try:
                 from pymongo import ReturnDocument
                 doc = await coll.find_one_and_update(
-                    {"mem_cell_id": mem_cell_id},
+                    filt,
                     pipeline,
                     return_document=ReturnDocument.AFTER,
                 )
             except ImportError:
                 # 测试 fake 无 pymongo 依赖时,降级为 update + get
-                await coll.update_one({"mem_cell_id": mem_cell_id}, pipeline)
-                cell = await self.get_by_id(mem_cell_id)
+                await coll.update_one(filt, pipeline)
+                cell = await self.get_by_id_scoped(
+                    mem_cell_id, tenant_id=tenant_id or "", user_id=user_id or ""
+                ) if tenant_id is not None and user_id is not None else await self.get_by_id(mem_cell_id)
                 if cell is None:
                     return None
                 return {
@@ -204,8 +229,13 @@ class MongoMemCellRepo:
                 "access_count": int(doc.get("access_count", 0)),
             }
         # 极度退化:无 find_one_and_update,串行 update + get(原子性弱)
-        await coll.update_one({"mem_cell_id": mem_cell_id}, pipeline)
-        cell = await self.get_by_id(mem_cell_id)
+        await coll.update_one(filt, pipeline)
+        if tenant_id is not None and user_id is not None:
+            cell = await self.get_by_id_scoped(
+                mem_cell_id, tenant_id=tenant_id, user_id=user_id
+            )
+        else:
+            cell = await self.get_by_id(mem_cell_id)
         if cell is None:
             return None
         return {

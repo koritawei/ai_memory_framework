@@ -69,7 +69,9 @@ class ColdPathServiceBuilder(ServiceBuilder):
             clusterer=clusterer,
         )
         state.cold_path_service = ColdPathService(
-            pipeline=pipeline, runner=state.background_runner
+            pipeline=pipeline,
+            runner=state.background_runner,
+            max_parallel=state.settings.cold_path_max_parallel,
         )
 
         if isinstance(state.background_runner, RedisTaskRunner):

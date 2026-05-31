@@ -91,6 +91,26 @@ class TestBusinessApiAuth:
             )
             assert r.status_code in (200, 503)
 
+    def test_200_with_bound_api_key_without_global_key(
+        self, project_cwd, monkeypatch, tmp_path
+    ):
+        import json
+
+        monkeypatch.setenv("MEMORY_API_KEY_BINDINGS", json.dumps(
+            {"bound-key": {"tenant_id": "tenant_a", "user_id": "u1"}}
+        ))
+        with _make_client(monkeypatch, tmp_path, auth_enabled=True, api_key=None) as client:
+            r = client.post(
+                "/v1/memory/ingest",
+                headers={"Authorization": "Bearer bound-key"},
+                json={
+                    "tenant_id": "tenant_a",
+                    "user_id": "u1",
+                    "history_sessions": [],
+                },
+            )
+            assert r.status_code in (200, 503)
+
     def test_health_unaffected_by_auth(self, project_cwd, monkeypatch, tmp_path):
         with _make_client(
             monkeypatch, tmp_path, auth_enabled=True, api_key="biz-secret"

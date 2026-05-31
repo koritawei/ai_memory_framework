@@ -49,19 +49,12 @@ def admin_client(project_cwd, tmp_path, monkeypatch):
             return None
 
     fake_mongo = _FakeMongo()
+    fake_es = _FakeES()
     fake_ingest = type(
         "S",
         (),
         {
-            "_pipeline": type(
-                "P",
-                (),
-                {
-                    "_sync_stage": type(
-                        "St", (), {"_es_repo": _FakeES(), "_milvus_repo": None}
-                    )()
-                },
-            )()
+            "sync_index_repos": lambda self: (fake_es, None),
         },
     )()
 

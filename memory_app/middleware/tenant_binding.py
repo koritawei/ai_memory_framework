@@ -39,6 +39,13 @@ class TenantBindingMiddleware:
             return
         identity = getattr(request.state, "identity", None)
         if identity is None:
+            if settings.auth_enabled:
+                response = JSONResponse(
+                    status_code=403,
+                    content={"detail": "tenant binding requires authenticated identity"},
+                )
+                await response(scope, receive, send)
+                return
             await self.app(scope, receive, send)
             return
         body = await request.body()

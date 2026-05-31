@@ -35,6 +35,7 @@ from typing import Any
 from memory_app.internal_models import MemoryType, RankedMemory
 from memory_app.plugins.base import PluginError, PluginErrorCategory
 from memory_app.retrieval.channels.base import BaseRetrievalChannel
+from memory_app.security.sanitize import escape_milvus_expr_string
 
 logger = logging.getLogger(__name__)
 
@@ -215,14 +216,16 @@ def _looks_blocking(collection: Any) -> bool:
 
 
 def _escape_milvus_str(value: Any) -> str:
-    """转义 Milvus 表达式字符串字面量,防止 expr 注入。
-
-    Milvus expr 字符串语法 ``field == "value"`` 中 ``value`` 用双引号包裹;
-    反斜杠和双引号必须转义,否则恶意 ``tenant_id`` 形如 ``" or tenant_id == "x``
-    可破坏多租户隔离。
-    """
-    s = str(value)
-    return s.replace("\\", "\\\\").replace('"', '\\"')
+    """校验并转义 Milvus 表达式字符串字面量（统一 security.sanitize 实现）。"""
+    try:
+        return escape_milvus_expr_string(str(value))
+    except ValueError as exc:
+        raise PluginError(
+            PluginErrorCategory.CONFIG,
+            "invalid_milvus_filter",
+            f"VectorChannel: invalid filter value {value!r}",
+            retryable=False,
+        ) from exc
 
 
 def _entity_get(entity: Any, key: str) -> Any:

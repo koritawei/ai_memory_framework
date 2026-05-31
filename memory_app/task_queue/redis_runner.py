@@ -31,6 +31,7 @@ class RedisTaskRunner:
         retry_policy: RetryPolicy | None = None,
         task_name_prefix: str = "redis_task",
         brpop_timeout_s: float = 2.0,
+        max_concurrent: int = 64,
     ) -> None:
         self._redis = redis_client
         self._queue_key = queue_key
@@ -38,6 +39,8 @@ class RedisTaskRunner:
         self._policy = retry_policy or RetryPolicy()
         self._prefix = task_name_prefix
         self._brpop_timeout = brpop_timeout_s
+        self._max_concurrent = max(1, int(max_concurrent))
+        self._sem = asyncio.Semaphore(self._max_concurrent)
         self._handlers: dict[str, TaskHandler] = {}
         self._consumer_task: asyncio.Task[Any] | None = None
         self._closed = False
@@ -105,9 +108,19 @@ class RedisTaskRunner:
             except json.JSONDecodeError:
                 logger.warning("invalid redis task payload: %s", raw[:200])
                 continue
-            await self._run_message(message)
+            self._dispatch_message(message)
 
-    async def _run_message(self, message: dict[str, Any]) -> None:
+    def _dispatch_message(self, message: dict[str, Any]) -> None:
+        asyncio.create_task(
+            self._run_message_guarded(message),
+            name=f"{self._prefix}:handler",
+        )
+
+    async def _run_message_guarded(self, message: dict[str, Any]) -> None:
+        async with self._sem:
+            await self._run_message_inner(message)
+
+    async def _run_message_inner(self, message: dict[str, Any]) -> None:
         handler_name = message.get("handler", "")
         handler = self._handlers.get(handler_name)
         task_id = message.get("task_id") or handler_name

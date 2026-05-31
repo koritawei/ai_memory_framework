@@ -200,6 +200,14 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
         self._milvus_repo = milvus_repo
         self._dlq = dlq
 
+    @property
+    def es_repo(self) -> _ESRepoProto | None:
+        return self._es_repo
+
+    @property
+    def milvus_repo(self) -> _MilvusRepoProto | None:
+        return self._milvus_repo
+
     async def run(self, ctx: IngestPipelineContext) -> IngestPipelineContext:
         # 性能优先策略:
         # 1. ES 支持 bulk_index → 一次 Bulk API
@@ -236,12 +244,26 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                 err_msg = str(e)
                 for cell in ctx.cells:
                     ctx.es_failures.append(cell.mem_cell_id)
-                    await self._enqueue_dlq("es", cell.mem_cell_id, err_msg)
+                    await self._enqueue_dlq(
+                        "es",
+                        cell.mem_cell_id,
+                        err_msg,
+                        tenant_id=cell.tenant_id,
+                        user_id=cell.user_id,
+                    )
                 return
             # Bulk 部分失败:把失败 id + 原始错误信息落 DLQ
+            cell_by_id = {c.mem_cell_id: c for c in ctx.cells}
             for mid, err_msg in (failures or {}).items():
                 ctx.es_failures.append(mid)
-                await self._enqueue_dlq("es", mid, err_msg)
+                cell = cell_by_id.get(mid)
+                await self._enqueue_dlq(
+                    "es",
+                    mid,
+                    err_msg,
+                    tenant_id=cell.tenant_id if cell else None,
+                    user_id=cell.user_id if cell else None,
+                )
             return
         # 回退:per-cell 并发
         await asyncio.gather(*(self._sync_es(c, ctx) for c in ctx.cells))
@@ -275,13 +297,29 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                     len(rows), e,
                 )
                 err_msg = str(e)
+                cell_by_id = {c.mem_cell_id: c for c in ctx.cells}
                 for mid, _, _ in rows:
                     ctx.milvus_failures.append(mid)
-                    await self._enqueue_dlq("milvus", mid, err_msg)
+                    cell = cell_by_id.get(mid)
+                    await self._enqueue_dlq(
+                        "milvus",
+                        mid,
+                        err_msg,
+                        tenant_id=cell.tenant_id if cell else None,
+                        user_id=cell.user_id if cell else None,
+                    )
                 return
+            cell_by_id = {c.mem_cell_id: c for c in ctx.cells}
             for mid, err_msg in (failures or {}).items():
                 ctx.milvus_failures.append(mid)
-                await self._enqueue_dlq("milvus", mid, err_msg)
+                cell = cell_by_id.get(mid)
+                await self._enqueue_dlq(
+                    "milvus",
+                    mid,
+                    err_msg,
+                    tenant_id=cell.tenant_id if cell else None,
+                    user_id=cell.user_id if cell else None,
+                )
             return
         # 回退:per-cell 并发
         await asyncio.gather(*(self._sync_milvus(c, ctx) for c in ctx.cells))
@@ -297,7 +335,13 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                 "ES sync failed for %s (degraded → DLQ): %s", cell.mem_cell_id, e
             )
             ctx.es_failures.append(cell.mem_cell_id)
-            await self._enqueue_dlq("es", cell.mem_cell_id, str(e))
+            await self._enqueue_dlq(
+                "es",
+                cell.mem_cell_id,
+                str(e),
+                tenant_id=cell.tenant_id,
+                user_id=cell.user_id,
+            )
 
     async def _sync_milvus(self, cell: MemCell, ctx: IngestPipelineContext) -> None:
         if self._milvus_repo is None:
@@ -320,11 +364,28 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                 cell.mem_cell_id, e,
             )
             ctx.milvus_failures.append(cell.mem_cell_id)
-            await self._enqueue_dlq("milvus", cell.mem_cell_id, str(e))
+            await self._enqueue_dlq(
+                "milvus",
+                cell.mem_cell_id,
+                str(e),
+                tenant_id=cell.tenant_id,
+                user_id=cell.user_id,
+            )
 
-    async def _enqueue_dlq(self, target: str, mem_cell_id: str, err: str) -> None:
+    async def _enqueue_dlq(
+        self,
+        target: str,
+        mem_cell_id: str,
+        err: str,
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
         if self._dlq is None:
             return
+        extra: dict[str, str] | None = None
+        if tenant_id and user_id:
+            extra = {"tenant_id": tenant_id, "user_id": user_id}
         try:
             await self._dlq.enqueue(
                 DLQRecord(
@@ -332,6 +393,7 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                     mem_cell_id=mem_cell_id,
                     operation="index",
                     error=err,
+                    extra=extra,
                 )
             )
         except Exception as e:  # noqa: BLE001
@@ -393,6 +455,12 @@ class IngestPipeline(
 
     async def finalize(self, ctx: IngestPipelineContext) -> list[str]:
         return [c.mem_cell_id for c in ctx.cells]
+
+    def sync_index_repos(
+        self,
+    ) -> tuple[_ESRepoProto | None, _MilvusRepoProto | None]:
+        """返回 SyncIndexStage 绑定的 ES / Milvus 仓储（供 Reconciler 复用）。"""
+        return self._sync_stage.es_repo, self._sync_stage.milvus_repo
 
 
 __all__ = [

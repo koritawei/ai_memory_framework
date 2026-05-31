@@ -68,6 +68,10 @@ class IngestService:
         """
         self._cold_path = cold_path_service
 
+    def sync_index_repos(self):
+        """返回热路径 SyncIndexStage 绑定的 ES / Milvus 仓储。"""
+        return self._pipeline.sync_index_repos()
+
     async def ingest(self, raw_data_list: list[RawData]) -> list[str]:
         """执行写入。
 
@@ -114,12 +118,14 @@ class ColdPathService:
         runner: "BackgroundTaskRunnerLike | None" = None,
         *,
         on_complete: "Optional[Any]" = None,
+        max_parallel: int = 64,
     ) -> None:
         self._pipeline = pipeline
         self._runner = runner
         # on_complete:可选 callback,签名 ``async (ctx) -> None`` —— 用于 Phase 4 把
         # ctx.episodes / ctx.semantics 落库;Phase 3 无持久化时留空
         self._on_complete = on_complete
+        self._parallel_sem = asyncio.Semaphore(max(1, max_parallel))
 
     def schedule(self, cell: MemCell) -> None:
         """火并忘提交 cell 的冷路径。"""
@@ -137,9 +143,10 @@ class ColdPathService:
             return
 
         async def _factory() -> None:
-            ctx = await self._pipeline.execute(cell)
-            if self._on_complete is not None:
-                await self._on_complete(ctx)
+            async with self._parallel_sem:
+                ctx = await self._pipeline.execute(cell)
+                if self._on_complete is not None:
+                    await self._on_complete(ctx)
 
         self._runner.submit(
             _factory,
@@ -153,10 +160,11 @@ class ColdPathService:
 
     async def run_now(self, cell: MemCell):
         """同步执行(便于评测 / e2e)。返回 :class:`ColdPathContext`。"""
-        ctx = await self._pipeline.execute(cell)
-        if self._on_complete is not None:
-            await self._on_complete(ctx)
-        return ctx
+        async with self._parallel_sem:
+            ctx = await self._pipeline.execute(cell)
+            if self._on_complete is not None:
+                await self._on_complete(ctx)
+            return ctx
 
     def attach_stage(self, stage) -> None:  # type: ignore[no-untyped-def]
         """对外开放的"追加 cold-path stage"API。
@@ -300,6 +308,8 @@ class FeedbackService:
                 delta=delta,
                 s_max=s_max,
                 increment_access=is_positive,
+                tenant_id=tenant_id,
+                user_id=user_id,
             )
             if applied is None:
                 return None
