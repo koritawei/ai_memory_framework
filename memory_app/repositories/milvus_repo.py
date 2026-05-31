@@ -161,7 +161,10 @@ class MilvusMemCellRepo:
         col = Collection(self.collection_name)
         import asyncio
 
-        await asyncio.to_thread(col.delete, f'mem_cell_id == "{mem_cell_id}"')
+        from memory_app.security import escape_milvus_expr_string
+
+        safe_id = escape_milvus_expr_string(mem_cell_id)
+        await asyncio.to_thread(col.delete, f'mem_cell_id == "{safe_id}"')
 
 
 # ════════════════════════════════════════════════════════════════════════════

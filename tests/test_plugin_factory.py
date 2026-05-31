@@ -162,6 +162,6 @@ async def test_factory_start_failure_does_not_leak_lock():
         with pytest.raises(PluginError):
             await fac.build("test.broken")
     # 关键断言:_build_locks 不应残留失败 build 的 lock
-    assert ("test.broken", "broken", "*", 1) not in fac._build_locks, (
+    assert ("test.broken", "broken", "*", "*", 1) not in fac._build_locks, (
         "失败路径泄漏了 lock 引用,_build_locks 字典会无限增长"
     )

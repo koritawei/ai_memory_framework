@@ -21,12 +21,16 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from memory_app.deps import get_feedback_service
+from memory_app.deps import get_feedback_service, require_api_auth
 from memory_app.schemas.feedback import FeedbackRequest
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/memory", tags=["memory"])
+router = APIRouter(
+    prefix="/v1/memory",
+    tags=["memory"],
+    dependencies=[Depends(require_api_auth)],
+)
 
 
 class FeedbackResponse(BaseModel):
@@ -62,6 +66,8 @@ async def submit_feedback(
         )
     try:
         result = await service.apply_feedback(
+            tenant_id=request.tenant_id,
+            user_id=request.user_id,
             mem_cell_id=request.mem_cell_id,
             memory_id=request.memory_id,
             feedback_type=request.feedback_type,

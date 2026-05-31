@@ -32,6 +32,7 @@ from memory_app.deps.depends import (
     get_memory_graph,
     get_mongo_repo,
     get_retrieval_orchestrator,
+    require_api_auth,
 )
 from memory_app.deps.health import HealthAggregator
 from memory_app.deps.state import AppState, app_state
@@ -52,4 +53,5 @@ __all__ = [
     "get_memory_graph",
     "get_mongo_repo",
     "get_entity_store",
+    "require_api_auth",
 ]

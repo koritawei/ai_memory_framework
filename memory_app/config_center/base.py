@@ -37,6 +37,10 @@ class ResolvedPluginConfig(BaseModel):
     #: 主要用于运维排查"为什么这个用户走了 hybrid_sbd"
     source: str = "default"
 
+    #: PluginFactory 缓存隔离键：``"*"`` 表示租户内共享；具体 ``user_id`` 表示
+    #: 该用户命中了 user 层覆盖或 user 相关灰度，不可与其他用户共享实例。
+    cache_user_key: str = "*"
+
 
 class ConfigChangeEvent(BaseModel):
     """配置变更事件，由 watch 推送给监听者（如 :class:`PluginFactory`）。"""

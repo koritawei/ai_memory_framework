@@ -10,7 +10,21 @@
 
 from __future__ import annotations
 
+from fastapi import Header
+
 from memory_app.deps.state import app_state
+from memory_app.security import verify_api_key
+
+
+def require_api_auth(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> None:
+    """业务面鉴权：``auth_enabled=true`` 时要求有效 API Key。"""
+    settings = app_state.settings
+    if settings is None:
+        return
+    verify_api_key(x_admin_key, x_api_key, settings)
 
 
 def get_ingest_service():
@@ -77,4 +91,5 @@ __all__ = [
     "get_memory_graph",
     "get_mongo_repo",
     "get_entity_store",
+    "require_api_auth",
 ]

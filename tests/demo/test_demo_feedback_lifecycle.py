@@ -71,6 +71,8 @@ async def test_demo_positive_feedback_increases_strength_and_access(fake_mongo):
     service = FeedbackService(mongo_repo=fake_mongo, reinforcer=reinforcer)
 
     result = await service.apply_feedback(
+        tenant_id=cell.tenant_id,
+        user_id=cell.user_id,
         mem_cell_id=cell.mem_cell_id,
         memory_id=None,
         feedback_type=FeedbackType.POSITIVE,
@@ -115,6 +117,8 @@ async def test_demo_negative_feedback_decreases_strength_but_not_access(fake_mon
         mongo_repo=fake_mongo, reinforcer=await _build_reinforcer()
     )
     result = await service.apply_feedback(
+        tenant_id=cell.tenant_id,
+        user_id=cell.user_id,
         mem_cell_id=cell.mem_cell_id,
         memory_id=None,
         feedback_type=FeedbackType.NEGATIVE,
@@ -151,6 +155,8 @@ async def test_demo_concurrent_positive_feedbacks_no_lost_update(fake_mongo):
     # 并发触发 3 个 POSITIVE 反馈
     async def _send():
         return await service.apply_feedback(
+            tenant_id=cell.tenant_id,
+            user_id=cell.user_id,
             mem_cell_id=cell.mem_cell_id,
             memory_id=None,
             feedback_type=FeedbackType.POSITIVE,
@@ -189,6 +195,8 @@ async def test_demo_strength_clipped_at_s_max(fake_mongo):
 
     async def _confirm():
         return await service.apply_feedback(
+            tenant_id=cell.tenant_id,
+            user_id=cell.user_id,
             mem_cell_id=cell.mem_cell_id,
             memory_id=None,
             feedback_type=FeedbackType.EXPLICIT_CONFIRM,
@@ -213,6 +221,8 @@ async def test_demo_feedback_returns_none_for_unknown_id(fake_mongo):
         mongo_repo=fake_mongo, reinforcer=await _build_reinforcer()
     )
     result = await service.apply_feedback(
+        tenant_id="t1",
+        user_id="u1",
         mem_cell_id="does-not-exist",
         memory_id=None,
         feedback_type=FeedbackType.POSITIVE,
@@ -271,6 +281,8 @@ async def test_demo_feedback_falls_back_to_update_when_atomic_unavailable():
         mongo_repo=legacy, reinforcer=await _build_reinforcer()
     )
     result = await service.apply_feedback(
+        tenant_id="t1",
+        user_id="u1",
         mem_cell_id=target_id,
         memory_id=None,
         feedback_type=FeedbackType.POSITIVE,

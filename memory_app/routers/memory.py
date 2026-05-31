@@ -31,6 +31,7 @@ from memory_app.deps import (
     get_consolidation_service,
     get_ingest_service,
     get_retrieval_orchestrator,
+    require_api_auth,
 )
 from memory_app.format_transfer import ingest_to_raw_data_list
 from memory_app.internal_models import RankedMemory
@@ -43,7 +44,11 @@ from memory_app.schemas.retrieve import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/memory", tags=["memory"])
+router = APIRouter(
+    prefix="/v1/memory",
+    tags=["memory"],
+    dependencies=[Depends(require_api_auth)],
+)
 
 
 # ════════════════════════════════════════════════════════════════════════════

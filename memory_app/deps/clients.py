@@ -15,9 +15,9 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from typing import Any
 
+from memory_app.security import redact_connection_url
 from memory_app.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class ExternalClients:
         await self.init_mongo(settings)
         await self.init_es(settings)
         await self.init_redis(settings)
-        self.init_milvus(settings)
+        await self.init_milvus(settings)
 
     async def init_mongo(self, settings: Settings) -> None:
         """幂等:已就绪时直接返回(支持 ConfigCenter 提前拉起 Mongo 的场景)。"""
@@ -65,7 +65,8 @@ class ExternalClients:
             self.mongo_db = self.mongo_client[settings.mongo_db]
             logger.info(
                 "mongo client created (uri=%s db=%s)",
-                settings.mongo_uri, settings.mongo_db,
+                redact_connection_url(settings.mongo_uri),
+                settings.mongo_db,
             )
         except Exception as e:  # noqa: BLE001
             logger.warning("mongo client init failed (degraded): %s", e)
@@ -92,27 +93,34 @@ class ExternalClients:
             self.redis_client = Redis.from_url(
                 settings.redis_url, socket_connect_timeout=2.0
             )
-            logger.info("redis client created (url=%s)", settings.redis_url)
+            logger.info(
+                "redis client created (url=%s)",
+                redact_connection_url(settings.redis_url),
+            )
         except Exception as e:  # noqa: BLE001
             logger.warning("redis client init failed (degraded): %s", e)
 
-    def init_milvus(self, settings: Settings) -> None:
+    async def init_milvus(self, settings: Settings) -> None:
         if self._milvus_connected:
             return
         try:
+            import asyncio
+            import warnings
+
             from pymilvus import connections as milvus_conn
 
-            with warnings.catch_warnings():
-                # 抑制 PyMilvus 3.x 的 ORM 弃用 warning:保留 connections.connect
-                # 是为了兼容 Milvus 2.x 服务端;升级到 MilvusClient 时再切。
-                warnings.filterwarnings("ignore", message=r".*ORM-style PyMilvus.*")
-                warnings.filterwarnings("ignore", category=DeprecationWarning)
-                milvus_conn.connect(
-                    alias="default",
-                    host=settings.milvus_host,
-                    port=str(settings.milvus_port),
-                    timeout=2.0,
-                )
+            def _connect() -> None:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message=r".*ORM-style PyMilvus.*")
+                    warnings.filterwarnings("ignore", category=DeprecationWarning)
+                    milvus_conn.connect(
+                        alias="default",
+                        host=settings.milvus_host,
+                        port=str(settings.milvus_port),
+                        timeout=2.0,
+                    )
+
+            await asyncio.to_thread(_connect)
             self.milvus_alias = "default"
             self._milvus_connected = True
             logger.info(

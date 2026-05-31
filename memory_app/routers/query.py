@@ -19,11 +19,15 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from memory_app.deps import get_memory_graph, get_mongo_repo
+from memory_app.deps import get_memory_graph, get_mongo_repo, require_api_auth
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/query", tags=["query"])
+router = APIRouter(
+    prefix="/v1/query",
+    tags=["query"],
+    dependencies=[Depends(require_api_auth)],
+)
 
 
 # ════════════════════════════════════════════════════════════════════════════

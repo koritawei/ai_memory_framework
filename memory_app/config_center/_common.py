@@ -52,7 +52,7 @@ from .base import (
     ConfigValidationError,
     ResolvedPluginConfig,
 )
-from .resolver import ConfigResolver
+from .resolver import ConfigResolver, compute_cache_user_key
 from .schema import fill_defaults, validate_params
 
 logger = logging.getLogger(__name__)
@@ -171,8 +171,17 @@ class BaseConfigCenter(PromptConfigMixin, ConfigCenter):
             logger.debug(
                 "plugin %s/%s not registered yet (allowed at bootstrap)", category, name
             )
+        cache_user_key = compute_cache_user_key(
+            user_id=user_id,
+            source=source,
+            variant_user_scoped=bool(cfg.get("_variant_user_scoped")),
+        )
         return ResolvedPluginConfig(
-            name=name, params=params, version=version, source=source
+            name=name,
+            params=params,
+            version=version,
+            source=source,
+            cache_user_key=cache_user_key,
         )
 
     async def write(

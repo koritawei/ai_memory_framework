@@ -46,6 +46,15 @@ from .resolver import ConfigResolver
 logger = logging.getLogger(__name__)
 
 
+def _ensure_yaml_mapping(data: dict, key: str) -> dict:
+    """确保 YAML 顶层 key 为 dict；YAML 中 ``key: null`` 时 ``setdefault`` 无效。"""
+    section = data.get(key)
+    if not isinstance(section, dict):
+        section = {}
+        data[key] = section
+    return section
+
+
 def _flatten_defaults(defaults_root: dict, prefix: str = "") -> dict[str, Any]:
     """把嵌套 defaults 展开为 ``{dotted_category: entry_dict}``。
 
@@ -162,11 +171,15 @@ class FileConfigCenter(BaseConfigCenter):
             # 2. 回写 YAML(异步包装到线程池,不阻塞事件循环)
             data = await self._read_raw_async()
             if scope == "global":
-                data.setdefault("global_overrides", {})[category] = entry
+                _ensure_yaml_mapping(data, "global_overrides")[category] = entry
             elif scope == "tenant":
-                data.setdefault("tenant_overrides", {}).setdefault(scope_id, {})[category] = entry
+                _ensure_yaml_mapping(data, "tenant_overrides").setdefault(scope_id, {})[
+                    category
+                ] = entry
             elif scope == "user":
-                data.setdefault("user_overrides", {}).setdefault(scope_id, {})[category] = entry
+                _ensure_yaml_mapping(data, "user_overrides").setdefault(scope_id, {})[
+                    category
+                ] = entry
             await self._write_raw_async(data)
 
             # 3. 同步 mtime（避免下次轮询误判为外部变更）
@@ -296,7 +309,7 @@ class FileConfigCenter(BaseConfigCenter):
                 await asyncio.sleep(self._poll_interval)
                 if not self._path.exists():
                     continue
-                mtime = self._path.stat().st_mtime
+                mtime = await asyncio.to_thread(lambda: self._path.stat().st_mtime)
                 if mtime > last:
                     await self._reload_from_disk_async()
                     last = mtime

@@ -114,12 +114,14 @@ class ColdPathService:
         runner: "BackgroundTaskRunnerLike | None" = None,
         *,
         on_complete: "Optional[Any]" = None,
+        max_parallel: int = 64,
     ) -> None:
         self._pipeline = pipeline
         self._runner = runner
         # on_complete:可选 callback,签名 ``async (ctx) -> None`` —— 用于 检索 把
         # ctx.episodes / ctx.semantics 落库;冷路径 无持久化时留空
         self._on_complete = on_complete
+        self._parallel_sem = asyncio.Semaphore(max(1, max_parallel))
 
     def schedule(self, cell: MemCell) -> None:
         """火并忘提交 cell 的冷路径。"""
@@ -127,9 +129,10 @@ class ColdPathService:
             raise RuntimeError("ColdPathService.runner not configured")
 
         async def _factory() -> None:
-            ctx = await self._pipeline.execute(cell)
-            if self._on_complete is not None:
-                await self._on_complete(ctx)
+            async with self._parallel_sem:
+                ctx = await self._pipeline.execute(cell)
+                if self._on_complete is not None:
+                    await self._on_complete(ctx)
 
         self._runner.submit(
             _factory,
@@ -211,6 +214,8 @@ class FeedbackService:
     async def apply_feedback(
         self,
         *,
+        tenant_id: str,
+        user_id: str,
         mem_cell_id: str | None,
         memory_id: str | None,
         feedback_type: "FeedbackType",
@@ -218,12 +223,22 @@ class FeedbackService:
         comment: str | None = None,
         retrieval_id: str | None = None,
     ) -> dict | None:
-        """应用反馈;``None`` 表示目标记忆不存在(对应 404)。"""
+        """应用反馈;``None`` 表示目标记忆不存在或租户/用户不匹配(对应 404)。"""
         target_id = mem_cell_id or memory_id
         if not target_id:
             return None
         cell = await self._mongo_repo.get_by_id(target_id)
         if cell is None:
+            return None
+        if cell.tenant_id != tenant_id or cell.user_id != user_id:
+            logger.warning(
+                "feedback rejected: tenant/user mismatch for %s (req=%s/%s cell=%s/%s)",
+                target_id,
+                tenant_id,
+                user_id,
+                cell.tenant_id,
+                cell.user_id,
+            )
             return None
 
         # 快照旧值 —— 避免 _FakeMongoRepo / 实际持久化层后续就地修改 cell 实例

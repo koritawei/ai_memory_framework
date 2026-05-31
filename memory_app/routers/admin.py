@@ -26,10 +26,11 @@
 ═══════════════════════════════════════════════════════════════════════════════
 两道闸:
 
-1. **总开关** ``settings.auth_enabled`` —— 关闭时所有 ``/v1/admin/*`` 自由访问
-   (仅本地开发态);开启时强制要求 ``X-Admin-Key`` 头。
-2. **API Key** ``settings.admin_api_key`` —— 配置后才允许 ``X-Admin-Key`` 通过。
-   未配置时若 ``auth_enabled=true`` 直接 403(防止配置错误暴露管理面)。
+1. **总开关** ``settings.auth_enabled`` —— 关闭时业务面 ``/v1/memory/*``、``/v1/query/*`` 自由访问；
+   开启时要求 ``X-API-Key`` 或 ``X-Admin-Key``（值均为 ``admin_api_key``）。
+2. **API Key** ``settings.admin_api_key`` —— 配置后 **管理面始终** 要求 ``X-Admin-Key`` 匹配
+   （即使 ``auth_enabled=false``，防止误配 key 仍暴露管理面）。
+   未配置 key 且 ``auth_enabled=true`` 时管理面直接 403。
 
 生产环境应在网关层再加 IP 白名单作为第三道防护。
 """
@@ -46,7 +47,8 @@ from memory_app.config_center import (
     ConfigValidationError,
     PromptNotFoundError,
 )
-from memory_app.deps import app_state
+from memory_app.deps.state import app_state
+from memory_app.security import verify_admin_key
 from memory_app.plugins import registry as plugin_registry
 from memory_app.prompt_manager.manager import _format_template
 
@@ -66,18 +68,8 @@ def _check_admin_key(x_admin_key: str | None) -> None:
     """
     settings = app_state.settings
     if settings is None:
-        # Settings 还未加载(极端情况),开发态允许通过
         return
-    expected = settings.admin_api_key
-    if expected is None:
-        # 未配置 admin_api_key 时,仅在 auth_enabled 总开关打开时拒绝
-        if settings.auth_enabled:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, detail="admin_api_key not configured"
-            )
-        return
-    if x_admin_key != expected:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="invalid X-Admin-Key")
+    verify_admin_key(x_admin_key, settings)
 
 
 def _require_config_center():

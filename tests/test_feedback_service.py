@@ -154,6 +154,8 @@ class TestFeedbackService:
         await r.start({})
         svc = FeedbackService(mongo_repo=repo, reinforcer=r)
         result = await svc.apply_feedback(
+            tenant_id="t1",
+            user_id="u1",
             mem_cell_id=cell.mem_cell_id,
             memory_id=None,
             feedback_type=FeedbackType.POSITIVE,
@@ -173,6 +175,8 @@ class TestFeedbackService:
         await r.start({})
         svc = FeedbackService(mongo_repo=repo, reinforcer=r)
         result = await svc.apply_feedback(
+            tenant_id="t1",
+            user_id="u1",
             mem_cell_id=cell.mem_cell_id,
             memory_id=None,
             feedback_type=FeedbackType.NEGATIVE,
@@ -189,6 +193,8 @@ class TestFeedbackService:
         await r.start({})
         svc = FeedbackService(mongo_repo=repo, reinforcer=r)
         result = await svc.apply_feedback(
+            tenant_id="t1",
+            user_id="u1",
             mem_cell_id=cell.mem_cell_id,
             memory_id=None,
             feedback_type=FeedbackType.POSITIVE,
@@ -203,6 +209,8 @@ class TestFeedbackService:
         await r.start({})
         svc = FeedbackService(mongo_repo=repo, reinforcer=r)
         result = await svc.apply_feedback(
+            tenant_id="t1",
+            user_id="u1",
             mem_cell_id="nonexistent",
             memory_id=None,
             feedback_type=FeedbackType.POSITIVE,
@@ -215,6 +223,8 @@ class TestFeedbackService:
         await r.start({})
         svc = FeedbackService(mongo_repo=repo, reinforcer=r)
         result = await svc.apply_feedback(
+            tenant_id="t1",
+            user_id="u1",
             mem_cell_id=None,
             memory_id=None,
             feedback_type=FeedbackType.POSITIVE,
@@ -229,6 +239,8 @@ class TestFeedbackService:
         await r.start({})
         svc = FeedbackService(mongo_repo=repo, reinforcer=r)
         result = await svc.apply_feedback(
+            tenant_id="t1",
+            user_id="u1",
             mem_cell_id=cell.mem_cell_id,
             memory_id=None,
             feedback_type=FeedbackType.EXPLICIT_CONFIRM,
@@ -236,3 +248,20 @@ class TestFeedbackService:
         # 1.0 + 0.3 * 1.0 = 1.3,access_count +1(positive)
         assert result["new_strength"] == pytest.approx(1.3)
         assert result["access_count"] == 1
+
+    async def test_tenant_user_mismatch_returns_none(self):
+        repo = _FakeMongoRepo()
+        cell = _cell()
+        await repo.insert(cell)
+        r = SynapticPlasticityReinforcer()
+        await r.start({})
+        svc = FeedbackService(mongo_repo=repo, reinforcer=r)
+        result = await svc.apply_feedback(
+            tenant_id="other-tenant",
+            user_id="u1",
+            mem_cell_id=cell.mem_cell_id,
+            memory_id=None,
+            feedback_type=FeedbackType.POSITIVE,
+        )
+        assert result is None
+        assert len(repo.updates) == 0
