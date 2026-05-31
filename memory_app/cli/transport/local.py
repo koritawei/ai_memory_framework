@@ -36,8 +36,9 @@ class LocalTransport(Transport):
 
     is_local: bool = True
 
-    def __init__(self, *, admin_key: str | None) -> None:
+    def __init__(self, *, admin_key: str | None, api_key: str | None = None) -> None:
         self.admin_key = admin_key
+        self.api_key = api_key
         self._client: Any | None = None  # httpx.AsyncClient
         self._lifespan_ctx: Any | None = None  # lifespan async cm
 
@@ -51,7 +52,7 @@ class LocalTransport(Transport):
 
         # FastAPI lifespan 通过 ASGITransport 不会自动跑;手动触发。
         # **顺序关键**:先成功启动 lifespan,再 commit self._client ——
-        # 否则 lifespan 启动失败时 self._client 已置,后续 request 会
+        # 否则 lifespan 启动失败时 self._client 已置,后续 request() 会
         # 跳过 init 直接打 ASGI(此时 app_state 尚未装配),导致 503 风暴。
         lifespan_ctx = fastapi_app.router.lifespan_context(fastapi_app)
         try:
@@ -59,7 +60,7 @@ class LocalTransport(Transport):
         except Exception:
             # 启动失败:必须给 lifespan 生成器一个 __aexit__ 机会,否则
             # 已经进入的 try/finally 块(mongo/es 客户端等)永远不会清理 ——
-            # 生成器对象被 GC 时再触发 close 已无法 await,资源泄漏。
+            # 生成器对象被 GC 时再触发 close() 已无法 await,资源泄漏。
             with suppress(Exception):
                 await lifespan_ctx.__aexit__(*sys.exc_info())
             # 启动失败:保持字段全 None,让调用方下次重试或冒泡给用户
@@ -87,6 +88,8 @@ class LocalTransport(Transport):
         headers: dict[str, str] = {"Accept": "application/json"}
         if admin and self.admin_key:
             headers["X-Admin-Key"] = self.admin_key
+        elif not admin and self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         params = (
             {k: v for k, v in (query or {}).items() if v is not None}
             if query

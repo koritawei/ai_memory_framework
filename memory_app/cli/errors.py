@@ -18,7 +18,7 @@ EXIT_UNREACHABLE = 4
 
 
 class CliError(Exception):
-    """CLI 终端异常 —— 替代旧版 ``_die`` 中 ``sys.exit`` 直接退出的反模式。
+    """CLI 终端异常 —— 替代旧版 ``_die()`` 中 ``sys.exit`` 直接退出的反模式。
 
     main 函数捕获本异常,统一打印到 stderr 并返回 ``exit_code``,便于单元测试
     断言"哪种输入导致哪个退出码"。

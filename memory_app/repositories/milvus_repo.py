@@ -1,23 +1,23 @@
-"""MemCell 在 Milvus 的向量索引层。
+"""MemCell 在 Milvus 的向量索引层(设计文档 §5.2 / §6.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
 ═══════════════════════════════════════════════════════════════════════════════
-Milvus 承载稠密向量检索;检索 起被 ``VectorChannel`` 用作多路召回之一。
+Milvus 承载稠密向量检索;Phase 4 起被 ``VectorChannel`` 用作多路召回之一。
 
 ═══════════════════════════════════════════════════════════════════════════════
-写入热路径 简化范围
+Phase 2 简化范围
 ═══════════════════════════════════════════════════════════════════════════════
 - ``insert(mem_cell_id, embedding, metadata)`` 接口对接 ``IngestService``
-- 仅当 ``cell.embedding`` 不为 None 时才被调用(写入热路径 多数 MemCell 没有
-  embedding,因为冷路径 / EmbeddingProvider 在 冷路径 才写入)
-- 真实集合的创建 / 索引参数(IVF_FLAT / HNSW)在 检索 启动期统一管理;
+- 仅当 ``cell.embedding`` 不为 None 时才被调用(Phase 2 多数 MemCell 没有
+  embedding,因为冷路径 / EmbeddingProvider 在 Phase 3 才写入)
+- 真实集合的创建 / 索引参数(IVF_FLAT / HNSW)在 Phase 4 启动期统一管理;
   此处仅做"写入存在的 collection"
 
 ═══════════════════════════════════════════════════════════════════════════════
 为什么不直接依赖 pymilvus
 ═══════════════════════════════════════════════════════════════════════════════
-。
+设计文档要求 Milvus 是可替换插件(可切 ``qdrant_store`` / ``pgvector_store``)。
 本类只暴露最小数据访问语义(insert / delete / search 入口),具体连接 / 集合
 由 :data:`memory_app.deps.app_state` 在 lifespan 中维护。
 """
@@ -33,10 +33,10 @@ logger = logging.getLogger(__name__)
 class MilvusMemCellRepo:
     """Milvus MemCell 向量索引仓储。
 
-    写入热路径 阶段为简化:
+    Phase 2 阶段为简化:
     - 集合名通过构造注入(``collection_name``,默认 ``memory_vectors``)
     - 写入失败抛原异常;:class:`IngestService` 据此走 DLQ 降级
-    - 不在本类内做 ``Collection.flush`` —— 由 lifespan 统一管理
+    - 不在本类内做 ``Collection.flush()`` —— 由 lifespan 统一管理
 
     可注入 ``insert_callable`` 接管真实写入逻辑,便于测试。
     """
@@ -161,7 +161,7 @@ class MilvusMemCellRepo:
         col = Collection(self.collection_name)
         import asyncio
 
-        from memory_app.security import escape_milvus_expr_string
+        from memory_app.security.sanitize import escape_milvus_expr_string
 
         safe_id = escape_milvus_expr_string(mem_cell_id)
         await asyncio.to_thread(col.delete, f'mem_cell_id == "{safe_id}"')

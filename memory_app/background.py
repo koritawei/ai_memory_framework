@@ -1,10 +1,10 @@
-"""BackgroundTaskRunner —— 异步后台任务调度(冷路径 冷路径)。
+"""BackgroundTaskRunner —— 异步后台任务调度(Phase 3 冷路径)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
 ═══════════════════════════════════════════════════════════════════════════════
 封装 ``asyncio.create_task`` + 重试 + DLQ 三件套,统一冷路径 / 巩固 / 反馈
-等"火并忘"任务的入口。离线巩固 切到 Celery / RQ 时只需替换本类实现,业务代码
+等"火并忘"任务的入口。Phase 6 切到 Celery / RQ 时只需替换本类实现,业务代码
 (``ColdPathService``)零改动。
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -18,7 +18,7 @@
 重试与 DLQ
 ═══════════════════════════════════════════════════════════════════════════════
 - 重试次数耗尽后,把任务包装为 :class:`memory_app.repositories.dlq.DLQRecord`
-  入注入的 :class:`InMemoryDLQ`(或 离线巩固+ 的持久化 DLQ);**不**抛异常
+  入注入的 :class:`InMemoryDLQ`(或 Phase 6+ 的持久化 DLQ);**不**抛异常
 - 重试期间 logger.warn,DLQ 入队后 logger.error
 - 每次重试间隔走指数退避(50ms → 200ms → 800ms;可由 ``RetryPolicy`` 调)
 """
@@ -66,7 +66,7 @@ class _DLQLike:
 # 主类
 # ════════════════════════════════════════════════════════════════════════════
 class BackgroundTaskRunner:
-    """异步任务调度器 —— 冷路径 冷路径默认实现。
+    """异步任务调度器 —— Phase 3 冷路径默认实现。
 
     线程安全说明:依赖单事件循环;如需多线程提交,需要外部加锁(本工程的
     asyncio + uvicorn 单进程 / 单 loop 模型已足够)。
@@ -78,6 +78,7 @@ class BackgroundTaskRunner:
         *,
         retry_policy: RetryPolicy | None = None,
         task_name_prefix: str = "cold_path",
+        max_concurrent: int | None = None,
     ) -> None:
         self._dlq = dlq
         self._policy = retry_policy or RetryPolicy()
@@ -87,6 +88,12 @@ class BackgroundTaskRunner:
         self._submitted: int = 0
         self._completed: int = 0
         self._failed_to_dlq: int = 0
+        self._max_concurrent = (
+            int(max_concurrent) if max_concurrent and max_concurrent > 0 else None
+        )
+        self._semaphore: asyncio.Semaphore | None = (
+            asyncio.Semaphore(self._max_concurrent) if self._max_concurrent else None
+        )
 
     # ────────────────────────────────────────────────────────────────────────
     # 提交
@@ -128,26 +135,31 @@ class BackgroundTaskRunner:
         on_failure_record: Optional[dict],
     ) -> None:
         last_err: BaseException | None = None
-        for attempt in range(1, self._policy.max_attempts + 1):
-            try:
-                await coro_factory()
-                self._completed += 1
-                return
-            except asyncio.CancelledError:
-                # 关停场景:不重试,不 DLQ
-                raise
-            except Exception as e:  # noqa: BLE001
-                last_err = e
-                if attempt >= self._policy.max_attempts:
-                    break
-                delay = self._policy.delay_for(attempt)
-                logger.warning(
-                    "background task %s failed (attempt %d/%d, retry in %.2fs): %s",
-                    task_id, attempt, self._policy.max_attempts, delay, e,
-                )
-                await asyncio.sleep(delay)
-        # 全部重试失败 → DLQ
-        await self._dlq_enqueue(task_id, last_err, on_failure_record)
+        sem = self._semaphore
+        if sem is not None:
+            await sem.acquire()
+        try:
+            for attempt in range(1, self._policy.max_attempts + 1):
+                try:
+                    await coro_factory()
+                    self._completed += 1
+                    return
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # noqa: BLE001
+                    last_err = e
+                    if attempt >= self._policy.max_attempts:
+                        break
+                    delay = self._policy.delay_for(attempt)
+                    logger.warning(
+                        "background task %s failed (attempt %d/%d, retry in %.2fs): %s",
+                        task_id, attempt, self._policy.max_attempts, delay, e,
+                    )
+                    await asyncio.sleep(delay)
+            await self._dlq_enqueue(task_id, last_err, on_failure_record)
+        finally:
+            if sem is not None:
+                sem.release()
 
     async def _dlq_enqueue(
         self, task_id: str | None, err: BaseException | None, base: Optional[dict]
@@ -199,6 +211,7 @@ class BackgroundTaskRunner:
             "failed_to_dlq": self._failed_to_dlq,
             "in_flight": len(self._tasks),
             "closed": self._closed,
+            "max_concurrent": self._max_concurrent,
         }
 
 

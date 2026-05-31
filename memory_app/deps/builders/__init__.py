@@ -1,6 +1,6 @@
-"""ServiceBuilders 注册表 —— 顺序敏感的装配序列。
+"""ServiceBuilders 注册表 —— Phase 2 → 7 顺序敏感的装配序列。
 
-把各业务 builder 类挂在 :data:`BUILDERS` 列表里；
+把每个 Phase 的 builder 类挂在 :data:`BUILDERS` 列表里;
 :meth:`AppState.init` 顺序遍历执行,任一失败仅 warn,不阻断后续。
 """
 
@@ -14,15 +14,15 @@ from memory_app.deps.builders.graph import GraphComponentsBuilder
 from memory_app.deps.builders.ingest import IngestServiceBuilder
 from memory_app.deps.builders.retrieval import RetrievalOrchestratorBuilder
 
-#: 顺序敏感：cold_path 依赖 ingest_service 已装配，feedback 依赖 retrieval，
+#: Phase 顺序敏感:cold_path 依赖 ingest_service 已装配,feedback 依赖 retrieval,
 #: graph 依赖 retrieval + cold_path。顺序与原 ``deps.py`` 内 init 调用次序一致。
 BUILDERS: list[ServiceBuilder] = [
-    IngestServiceBuilder(),           # 写入热路径
-    ColdPathServiceBuilder(),         # 冷路径(可挂接到 IngestService)
-    RetrievalOrchestratorBuilder(),   # 检索
-    FeedbackLifecycleBuilder(),       # 反馈与生命周期(可挂接到 RetrievalOrchestrator)
-    ConsolidationServiceBuilder(),    # 离线巩固
-    GraphComponentsBuilder(),         # 图与实体(可挂接到 RetrievalOrchestrator + ColdPath)
+    IngestServiceBuilder(),           # Phase 2
+    ColdPathServiceBuilder(),         # Phase 3(可挂接到 IngestService)
+    RetrievalOrchestratorBuilder(),   # Phase 4
+    FeedbackLifecycleBuilder(),       # Phase 5(可挂接到 RetrievalOrchestrator)
+    ConsolidationServiceBuilder(),    # Phase 6
+    GraphComponentsBuilder(),         # Phase 7(可挂接到 RetrievalOrchestrator + ColdPath)
 ]
 
 

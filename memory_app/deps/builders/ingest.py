@@ -1,4 +1,4 @@
-"""IngestServiceBuilder —— 写入热路径 写入热路径门面装配。
+"""IngestServiceBuilder —— Phase 2 写入热路径门面装配。
 
 铁律:
 - SBD 必须经 ``factory.build(...)`` 取得,**禁止**直接 import 默认插件
@@ -28,7 +28,6 @@ class IngestServiceBuilder(ServiceBuilder):
 
     async def build(self, state: "AppState") -> None:
         from memory_app.pipelines import IngestPipeline
-        from memory_app.repositories.dlq import InMemoryDLQ
         from memory_app.repositories.es_repo import ESMemCellRepo
         from memory_app.repositories.milvus_repo import MilvusMemCellRepo
         from memory_app.repositories.mongo_repo import MongoMemCellRepo
@@ -65,9 +64,11 @@ class IngestServiceBuilder(ServiceBuilder):
             else None
         )
 
-        # 4. DLQ —— 写入热路径 用进程内 fallback
+        # 4. DLQ —— 按 bootstrap 选择持久化后端
         if state.dlq is None:
-            state.dlq = InMemoryDLQ()
+            from memory_app.repositories.dlq_factory import create_dlq
+
+            state.dlq = await create_dlq(state.settings, state.clients)
 
         # 5. 装配管线 + 服务(冷路径在 ColdPathServiceBuilder 后挂接)
         pipeline = IngestPipeline(
@@ -77,12 +78,14 @@ class IngestServiceBuilder(ServiceBuilder):
             milvus_repo=milvus_repo,
             dlq=state.dlq,
         )
+        state.mongo_repo = mongo_repo
         state.ingest_service = IngestService(pipeline)
         logger.info(
-            "ingest_service initialized: sbd=%s, es=%s, milvus=%s, dlq=in_memory",
+            "ingest_service initialized: sbd=%s, es=%s, milvus=%s, dlq=%s",
             sbd.meta.name,
             "ok" if es_repo else "off",
             "ok" if milvus_repo else "off",
+            state.settings.dlq_backend,
         )
 
 

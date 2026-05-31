@@ -37,6 +37,7 @@ class Transport(ABC):
         - ``json_body``:若非 None 则 POST/PUT 时塞 body(``application/json``)
         - ``query``:URL query 参数,值为 None 的键被过滤
         - ``admin``:为 True 时注入 ``X-Admin-Key`` 头(从构造参数取)
+        - 非 admin 且配置了 ``api_key`` 时注入 ``Authorization: Bearer``
         """
 
     async def aclose(self) -> None:

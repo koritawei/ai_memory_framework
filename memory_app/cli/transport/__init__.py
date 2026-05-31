@@ -13,9 +13,12 @@ from memory_app.cli.transport.local import LocalTransport
 def make_transport(args: argparse.Namespace) -> Transport:
     """根据 ``--local`` / ``--server`` 选择 Transport 实例。"""
     if getattr(args, "local", False):
-        return LocalTransport(admin_key=args.admin_key)
+        return LocalTransport(admin_key=args.admin_key, api_key=args.api_key)
     return HttpTransport(
-        args.server, admin_key=args.admin_key, timeout=args.timeout
+        args.server,
+        admin_key=args.admin_key,
+        api_key=args.api_key,
+        timeout=args.timeout,
     )
 
 

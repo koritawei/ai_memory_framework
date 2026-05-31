@@ -1,22 +1,22 @@
-"""业务服务门面层。
+"""业务服务门面层(设计文档 §5.1 / §2.7.6)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 分层定位
 ═══════════════════════════════════════════════════════════════════════════════
 - **路由层** ``routers/memory.py``    HTTP 入口,只做协议解析与响应序列化
 - **服务层** ``services.py``          业务门面(本模块),委托管线;不展开阶段细节
-- **管线层** ``pipelines/``           阶段链编排
+- **管线层** ``pipelines/``           阶段链编排(§2.7.6)
 - **数据层** ``repositories/``        各存储后端 CRUD
 
 ═══════════════════════════════════════════════════════════════════════════════
-铁律
+铁律(设计文档 Phase 2 引语)
 ═══════════════════════════════════════════════════════════════════════════════
 **业务平面禁止**直接 ``from memory_app.plugins_default.* import *``;
 SBD / 各种 Channel 等组件**必须**通过 :meth:`PluginFactory.build` 取得。
 
 应用入口(``deps.py`` 的 ``get_ingest_service``)负责装配:
 1. 调 ``factory.build("memory.generation.boundary_detector", tenant_id)`` 拿到 SBD
-2. 创建 :class:`MongoMemCellRepo` (写入热路径 起还含 ES / Milvus repo)
+2. 创建 :class:`MongoMemCellRepo` (Phase 2.3 起还含 ES / Milvus repo)
 3. 注入 :class:`IngestPipeline`
 4. 把 pipeline 注入 :class:`IngestService`
 """
@@ -46,7 +46,7 @@ class IngestService:
     - 接收已转好的 :class:`RawData` 列表
     - 委托 :class:`IngestPipeline.execute`
     - 返回 ``mem_cell_id`` 列表
-    - **可选**触发冷路径(冷路径):构造时注入 ``cold_path_service`` 后,
+    - **可选**触发冷路径(Phase 3):构造时注入 ``cold_path_service`` 后,
       热路径成功落 SOT 后自动 ``schedule`` 每个 cell 的后台抽取
     """
 
@@ -62,7 +62,7 @@ class IngestService:
     # 公开钩子(替代旧版"装配层 monkey-patch private _cold_path"反模式)
     # ────────────────────────────────────────────────────────────────────────
     def attach_cold_path(self, cold_path_service: "ColdPathService | None") -> None:
-        """装配冷路径服务(冷路径 ColdPathService 装配完成后由 builder 调用)。
+        """装配冷路径服务(Phase 3 ColdPathService 装配完成后由 builder 调用)。
 
         允许传 ``None`` 表示「解绑」,便于评测 / 测试场景。
         """
@@ -92,10 +92,10 @@ class IngestService:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# ColdPathService —— 异步冷路径门面(冷路径)
+# ColdPathService —— 异步冷路径门面(Phase 3)
 # ════════════════════════════════════════════════════════════════════════════
 class ColdPathService:
-    """异步冷路径业务门面(~3.4 的串联点)。
+    """异步冷路径业务门面(Step 3.1~3.4 的串联点)。
 
     职责:
     - :meth:`schedule(cell)`        把单条 MemCell 的冷路径任务提交后台运行
@@ -114,25 +114,32 @@ class ColdPathService:
         runner: "BackgroundTaskRunnerLike | None" = None,
         *,
         on_complete: "Optional[Any]" = None,
-        max_parallel: int = 64,
     ) -> None:
         self._pipeline = pipeline
         self._runner = runner
-        # on_complete:可选 callback,签名 ``async (ctx) -> None`` —— 用于 检索 把
-        # ctx.episodes / ctx.semantics 落库;冷路径 无持久化时留空
+        # on_complete:可选 callback,签名 ``async (ctx) -> None`` —— 用于 Phase 4 把
+        # ctx.episodes / ctx.semantics 落库;Phase 3 无持久化时留空
         self._on_complete = on_complete
-        self._parallel_sem = asyncio.Semaphore(max(1, max_parallel))
 
     def schedule(self, cell: MemCell) -> None:
         """火并忘提交 cell 的冷路径。"""
         if self._runner is None:
             raise RuntimeError("ColdPathService.runner not configured")
 
+        submit_handler = getattr(self._runner, "submit_handler", None)
+        if callable(submit_handler):
+            submit_handler(
+                "cold_path",
+                {"mem_cell_id": cell.mem_cell_id},
+                task_id=cell.mem_cell_id,
+                on_failure_record={"target": "cold_path", "operation": "execute"},
+            )
+            return
+
         async def _factory() -> None:
-            async with self._parallel_sem:
-                ctx = await self._pipeline.execute(cell)
-                if self._on_complete is not None:
-                    await self._on_complete(ctx)
+            ctx = await self._pipeline.execute(cell)
+            if self._on_complete is not None:
+                await self._on_complete(ctx)
 
         self._runner.submit(
             _factory,
@@ -186,16 +193,16 @@ class BackgroundTaskRunnerLike:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# FeedbackService —— 反馈门面(反馈与生命周期)
+# FeedbackService —— 反馈门面(Phase 5 Step 5.1)
 # ════════════════════════════════════════════════════════════════════════════
 class FeedbackService:
-    """显式 / 隐式反馈处理。
+    """显式 / 隐式反馈处理(设计文档 §7.5)。
 
     职责:
     - 取出目标 MemCell(``mem_cell_id`` / ``memory_id``)
     - 委托 :class:`Reinforcer` SPI 计算新 strength
     - 持久化到 MongoDB(SOT);ES / Milvus 的 ``access_count`` 等字段同步
-      由 离线巩固+ 的 Reconciler 异步对齐(本服务不做)
+      由 Phase 6+ 的 Reconciler 异步对齐(本服务不做)
     - 返回审计 dict(``old_strength`` / ``new_strength`` / ``delta`` 等)
 
     与 SPI 的契约:
@@ -223,22 +230,31 @@ class FeedbackService:
         comment: str | None = None,
         retrieval_id: str | None = None,
     ) -> dict | None:
-        """应用反馈;``None`` 表示目标记忆不存在或租户/用户不匹配(对应 404)。"""
+        """应用反馈;``None`` 表示目标记忆不存在或租户不匹配(对应 404)。"""
         target_id = mem_cell_id or memory_id
         if not target_id:
             return None
-        cell = await self._mongo_repo.get_by_id(target_id)
-        if cell is None:
-            return None
-        if cell.tenant_id != tenant_id or cell.user_id != user_id:
-            logger.warning(
-                "feedback rejected: tenant/user mismatch for %s (req=%s/%s cell=%s/%s)",
-                target_id,
-                tenant_id,
-                user_id,
-                cell.tenant_id,
-                cell.user_id,
+        scoped_get = getattr(self._mongo_repo, "get_by_id_scoped", None)
+        if callable(scoped_get):
+            cell = await scoped_get(
+                target_id, tenant_id=tenant_id, user_id=user_id
             )
+        else:
+            cell = await self._mongo_repo.get_by_id(target_id)
+            if cell is not None and (
+                cell.tenant_id != tenant_id or cell.user_id != user_id
+            ):
+                logger.warning(
+                    "feedback rejected: tenant/user mismatch for %s "
+                    "(request=%s/%s cell=%s/%s)",
+                    target_id,
+                    tenant_id,
+                    user_id,
+                    cell.tenant_id,
+                    cell.user_id,
+                )
+                return None
+        if cell is None:
             return None
 
         # 快照旧值 —— 避免 _FakeMongoRepo / 实际持久化层后续就地修改 cell 实例
@@ -247,7 +263,7 @@ class FeedbackService:
 
         ref = MemoryRef(
             memory_id=cell.mem_cell_id,
-            memory_type="EPISODIC",  # MemCell 在 反馈与生命周期 视为情景前驱
+            memory_type="EPISODIC",  # MemCell 在 Phase 5 视为情景前驱
             state=cell.state,
             strength=old_strength,
             access_count=old_access,
@@ -319,7 +335,7 @@ def _resolve_reinforcer_s_max(reinforcer: Any) -> float:
     - 直接属性 ``reinforcer.s_max``
     - 嵌套配置 ``reinforcer._config.s_max``(``SynapticPlasticityReinforcer`` 的形态)
     - 元数据兜底 ``meta.config_schema.properties.s_max.default``
-    无法确定时回退到 5.0(与 反馈与生命周期 默认实现保持一致),宁愿略保守也不放大上限。
+    无法确定时回退到 5.0(与 Phase 5 默认实现保持一致),宁愿略保守也不放大上限。
     """
     direct = getattr(reinforcer, "s_max", None)
     if isinstance(direct, (int, float)) and direct > 0:
@@ -342,14 +358,14 @@ def _resolve_reinforcer_s_max(reinforcer: Any) -> float:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# ConsolidationService —— 离线巩固门面(离线巩固)
+# ConsolidationService —— 离线巩固门面(Phase 6 Step 6.4)
 # ════════════════════════════════════════════════════════════════════════════
 class ConsolidationService:
     """:class:`POST /v1/memory/consolidate` 的业务门面。
 
     委托 :class:`ConsolidationStrategy` SPI(默认 ``three_phase``)
-    + 持久化 SemanticMemory 的简单写入（可选；离线巩固阶段仅记 metrics，
-    GraphStore 启用后由 Reconciler 接管）。
+    + 持久化 SemanticMemory 的简单写入(可选;Phase 6 仅记 metrics,
+    持久化在 Phase 7 GraphStore 启用后由 Reconciler 接管)。
     """
 
     def __init__(
@@ -362,7 +378,7 @@ class ConsolidationService:
         # 可选:由调用方提供"扫描哪些 (tenant, user)"的策略
         self._scope_provider = scope_provider
         # 串行化 set_scope_provider + run:strategy 是 PluginFactory 单例缓存的
-        # 共享实例,scope_provider 写到 strategy 后再 await run —— 两个并发
+        # 共享实例,scope_provider 写到 strategy 后再 await run() —— 两个并发
         # consolidate(tenant=A) 与 consolidate(tenant=B) 会互踩 scope,
         # 造成跨租户污染。这把锁确保"绑 scope → 跑 run → 解绑"是原子序列。
         self._call_lock: asyncio.Lock = asyncio.Lock()
@@ -380,7 +396,7 @@ class ConsolidationService:
 
         - ``user_id=None`` 表示对该 tenant 下所有 user 扫描(由 ``scope_provider``)
         - ``dry_run`` 暂不强制约束 strategy(子策略各自实现是否真持久化);
-          ``three_phase`` 策略内部使用 ``DecayManager.dry_run=False``
+          Phase 6 ``three_phase`` 实现内部使用 ``DecayManager.dry_run=False``
           的语义;后续可下传 dry_run 给子组件
 
         并发模型:同一 service 实例上的多个 consolidate 调用会被 ``self._call_lock``
@@ -390,7 +406,7 @@ class ConsolidationService:
         # 临时把 scope 注入 strategy(若它暴露 set_scope_provider 钩子)。
         # 历史上是直接 mutate `self._strategy._scope_provider`(private 字段),
         # 改为约定:任何想支持「按 tenant/user 缩窗」的 strategy 实现可选实现
-        # `set_scope_provider(async  -> list[ConsolidationScope])` 公开方法。
+        # `set_scope_provider(async () -> list[ConsolidationScope])` 公开方法。
         async with self._call_lock:
             if self._scope_provider is not None and tenant_id is not None:
                 async def _scope() -> list:

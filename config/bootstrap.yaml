@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # 优先级（高 → 低）：环境变量 (MEMORY_*) > 本文件 > （无）
 # 仅承载启动期不可变项；运行时可调参数走 ConfigCenter（config/default.yaml）。
-# 详见「单一事实源」原则。
+# 详见设计文档 §2.8.1「单一事实源」原则。
 #
 # 重定向：可通过环境变量 MEMORY_BOOTSTRAP_FILE 指向其他路径
 # 例：MEMORY_BOOTSTRAP_FILE=/etc/memory/bootstrap.prod.yaml uv run uvicorn ...
@@ -19,7 +19,7 @@ mongo_db: "memory"
 
 # ── Elasticsearch ──
 es_hosts:
-- "http://localhost:9200"
+  - "http://localhost:9200"
 es_index_prefix: "memory"
 
 # ── Milvus ──
@@ -31,16 +31,39 @@ milvus_collection: "memory_vectors"
 redis_url: "redis://localhost:6379/0"
 
 # ── 配置中心后端选择（启动期决定，不可热改）──
-config_center_backend: "file" # file | mongo
+config_center_backend: "file"           # file | mongo
 config_center_file_path: "config/default.yaml"
 
 # ── 鉴权 ──
 auth_enabled: false
-admin_api_key: null # null = 未配置；为非空字符串时启用 X-Admin-Key 校验
+admin_api_key: null                      # null = 未配置；为非空字符串时启用 X-Admin-Key 校验
+api_key: null                            # null = 未配置；为非空字符串时启用 Bearer 业务面鉴权
+tenant_binding_enabled: false            # true 时校验请求体 tenant_id 与 API Key / JWT 绑定一致
+trust_gateway_headers: false             # true 时鉴权通过后信任 X-Tenant-Id / X-User-Id 头
+jwt_secret: null                         # 非 null 时 Bearer 可解析 JWT（claim: tenant_id / user_id）
+jwt_algorithm: "HS256"
+api_key_bindings: {}                     # api_key -> {tenant_id, user_id?}，防租户 ID 伪造
+
+# ── DLQ / 后台任务 ──
+dlq_backend: "memory"                    # memory | mongo | redis
+task_runner_backend: "asyncio"           # asyncio | redis（多 worker 冷路径一致性）
+task_queue_key: "memory:tasks:cold_path"
+
+# ── 可观测 / 限流（Phase 8）──
+metrics_enabled: false
+rate_limit_enabled: false
+rate_limit_rpm: 120                      # 每 key 每分钟请求上限
+rate_limit_backend: "memory"             # memory | redis
+
+# ── DLQ Reconciler ──
+dlq_reconcile_interval_s: 0               # 0=仅手动/admin；>0 时后台自动扫
+dlq_reconcile_batch_size: 100
+dlq_reconcile_max_retries: 5
+task_runner_consumer_enabled: true        # false 时 API 不消费 Redis 队列(交给 worker)
 
 # ── 启动行为 ──
 discover_entry_point_plugins: true
 plugin_entry_point_group: "memory_app.plugins"
 
 # ── 健康检查行为 ──
-strict_readiness: false # true 时，外部依赖任一失败即 /health/ready=fail
+strict_readiness: false                  # true 时，外部依赖任一失败即 /health/ready=fail

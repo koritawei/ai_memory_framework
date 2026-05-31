@@ -23,10 +23,11 @@ class HttpTransport(Transport):
     is_local: bool = False
 
     def __init__(
-        self, server: str, *, admin_key: str | None, timeout: float
+        self, server: str, *, admin_key: str | None, api_key: str | None, timeout: float
     ) -> None:
         self.server = server.rstrip("/")
         self.admin_key = admin_key
+        self.api_key = api_key
         self.timeout = timeout
 
     async def request(
@@ -52,6 +53,8 @@ class HttpTransport(Transport):
             headers["Content-Type"] = "application/json"
         if admin and self.admin_key:
             headers["X-Admin-Key"] = self.admin_key
+        elif not admin and self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # noqa: S310 —— 已通过 server 参数受控

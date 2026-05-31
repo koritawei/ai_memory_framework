@@ -1,4 +1,4 @@
-"""``/v1/memory/*`` 业务路由。
+"""``/v1/memory/*`` 业务路由(设计文档 §2.5 / §5.1 / §6)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 已交付端点
@@ -9,7 +9,7 @@
 | POST | /v1/memory/ingest   | 写入热路径(SBD → MemCell → ES/Milvus 同步) |
 | POST | /v1/memory/retrieve | 检索五阶段(召回 → 融合 → 增强 → 过滤 → 重排) |
 
-后续 反馈与生命周期 / 6 会增补 ``/feedback`` / ``/admin/...``。
+后续 Phase 5 / 6 会增补 ``/feedback`` / ``/admin/...``。
 
 ═══════════════════════════════════════════════════════════════════════════════
 契约
@@ -31,7 +31,6 @@ from memory_app.deps import (
     get_consolidation_service,
     get_ingest_service,
     get_retrieval_orchestrator,
-    require_api_auth,
 )
 from memory_app.format_transfer import ingest_to_raw_data_list
 from memory_app.internal_models import RankedMemory
@@ -44,11 +43,7 @@ from memory_app.schemas.retrieve import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/v1/memory",
-    tags=["memory"],
-    dependencies=[Depends(require_api_auth)],
-)
+router = APIRouter(prefix="/v1/memory", tags=["memory"])
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -62,7 +57,7 @@ class IngestResponse(BaseModel):
     #: 落库后的 MemCell 主键列表(顺序与 SBD 切分顺序一致)
     mem_cell_ids: list[str] = Field(default_factory=list)
 
-    #: ``ok`` / ``partial`` / ``empty``;写入热路径 仅 ok / empty
+    #: ``ok`` / ``partial`` / ``empty``;Phase 2 仅 ok / empty
     status: str = "ok"
 
     #: 总段数(便于客户端做指标埋点)
@@ -111,7 +106,7 @@ async def ingest_memory(
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# /retrieve(检索)
+# /retrieve(Phase 4)
 # ════════════════════════════════════════════════════════════════════════════
 @router.post(
     "/retrieve",
@@ -123,7 +118,7 @@ async def retrieve_memory(
     request: RetrieveMemRequest,
     orchestrator=Depends(get_retrieval_orchestrator),
 ) -> RetrieveMemResponse:
-    """检索五阶段编排。
+    """检索五阶段编排(§6)。
 
     设计要点:
     - 路由层只做契约转换,所有阶段编排在
@@ -159,7 +154,7 @@ def _to_memory_hit(m: RankedMemory) -> MemoryHit:
         content=m.content,
         score=float(m.score),
         memory_type=m.memory_type.value if hasattr(m.memory_type, "value") else str(m.memory_type),
-        source_episodes=[],  # 检索 暂不组装证据链
+        source_episodes=[],  # Phase 4 暂不组装证据链
         metadata={
             **(m.metadata or {}),
             "rank": m.rank,
@@ -177,7 +172,7 @@ def _debug_payload(orchestrator, request: RetrieveMemRequest) -> dict:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# /consolidate(离线巩固)
+# /consolidate(Phase 6)
 # ════════════════════════════════════════════════════════════════════════════
 class ConsolidateRequest(BaseModel):
     """``POST /v1/memory/consolidate`` 请求。"""
@@ -220,7 +215,7 @@ async def consolidate_memory(
 ) -> ConsolidateResponse:
     if service is None:
         # ConsolidationService 未装配:返回 200 + ``not_implemented`` 状态
-        #
+        # (设计文档要求"非 500 未定义";避免阻塞客户端轮询)
         return ConsolidateResponse(
             status="not_implemented",
             detail={

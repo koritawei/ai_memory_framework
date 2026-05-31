@@ -20,6 +20,7 @@ from memory_app.cli.commands import COMMANDS
 DEFAULT_SERVER = "http://127.0.0.1:8000"
 ENV_SERVER = "MEMORY_CLI_SERVER"
 ENV_ADMIN_KEY = "MEMORY_ADMIN_KEY"
+ENV_API_KEY = "MEMORY_API_KEY"
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:
@@ -38,6 +39,11 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
         help=f"管理面 X-Admin-Key(默认 ${ENV_ADMIN_KEY})",
     )
     g.add_argument(
+        "--api-key",
+        default=os.environ.get(ENV_API_KEY),
+        help=f"业务面 Bearer API Key(默认 ${ENV_API_KEY})",
+    )
+    g.add_argument(
         "--timeout", type=float, default=30.0,
         help="HTTP 超时秒(默认 30)",
     )
@@ -52,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="memory",
         description=(
-            "Memory Service CLI —— 分层认知记忆系统统一入口"
+            "Memory Service CLI —— 分层认知记忆系统统一入口(设计文档 附录 B)"
         ),
     )
     _add_common(p)

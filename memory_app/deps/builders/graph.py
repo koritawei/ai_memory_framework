@@ -1,4 +1,4 @@
-"""GraphComponentsBuilder —— 图与实体 实体 / 图与对应检索通道装配。"""
+"""GraphComponentsBuilder —— Phase 7 实体 / 图与对应检索通道装配。"""
 
 from __future__ import annotations
 
@@ -67,13 +67,13 @@ class GraphComponentsBuilder(ServiceBuilder):
             state.memory_graph = MemoryGraph(graph_store)
 
         # 5. 把 Entity / Graph channels 接入 RetrievalOrchestrator(若已就绪)
-        await self._wire_graph_channels(state)
+        await self._wire_phase7_channels(state)
 
         # 6. 把 EntityIndexStage 接入 ColdPathPipeline(若已就绪)
-        self._wire_entity_index_cold_stage(state)
+        self._wire_phase7_cold_stage(state)
 
         logger.info(
-            "图与实体 components: entity_store=%s, extractor=%s, graph=%s",
+            "phase7 components: entity_store=%s, extractor=%s, graph=%s",
             type(state.entity_store).__name__ if state.entity_store else "off",
             getattr(getattr(state.entity_extractor, "meta", None), "name", "off"),
             "ok" if state.memory_graph else "off",
@@ -83,7 +83,7 @@ class GraphComponentsBuilder(ServiceBuilder):
     # 子接线
     # ────────────────────────────────────────────────────────────────────────
     @staticmethod
-    async def _wire_graph_channels(state: "AppState") -> None:
+    async def _wire_phase7_channels(state: "AppState") -> None:
         """根据 config 中各 channel.enabled 决定是否装配 entity / graph 通道。
 
         通过 RetrievalOrchestrator.add_recall_channel(公开 API)接入,
@@ -101,7 +101,7 @@ class GraphComponentsBuilder(ServiceBuilder):
             )
             return
 
-        graph_channel_binder = DependencyBinder(
+        phase7_binder = DependencyBinder(
             entity_store=state.entity_store,
             mongo_repo=state.mongo_repo,
             entity_extractor=state.entity_extractor,
@@ -121,7 +121,7 @@ class GraphComponentsBuilder(ServiceBuilder):
                 continue
             if channel is None:
                 continue
-            graph_channel_binder.bind(channel)
+            phase7_binder.bind(channel)
             if add_channel(slug, channel):
                 logger.info("injected retrieval channel: %s", slug)
             else:
@@ -130,7 +130,7 @@ class GraphComponentsBuilder(ServiceBuilder):
                 )
 
     @staticmethod
-    def _wire_entity_index_cold_stage(state: "AppState") -> None:
+    def _wire_phase7_cold_stage(state: "AppState") -> None:
         """把 EntityIndexStage 注入既有 ColdPathPipeline(若已就绪)。
 
         通过 ColdPathService.attach_stage / find_extra_stage(公开 API)接入,

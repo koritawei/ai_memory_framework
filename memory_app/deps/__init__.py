@@ -9,7 +9,7 @@
 - :data:`app_state`               模块级单例
 - :class:`ExternalClients`        外部客户端组(见 :mod:`.clients`)
 - :class:`HealthAggregator`       健康聚合器(见 :mod:`.health`)
-- :data:`BUILDERS`                各业务 ServiceBuilder 注册表（见 :mod:`.builders`）
+- :data:`BUILDERS`                各 Phase ServiceBuilder 注册表(见 :mod:`.builders`)
 - ``get_*``                       FastAPI Depends 工厂(见 :mod:`.depends`)
 
 公共 import 路径保持不变:
@@ -32,7 +32,6 @@ from memory_app.deps.depends import (
     get_memory_graph,
     get_mongo_repo,
     get_retrieval_orchestrator,
-    require_api_auth,
 )
 from memory_app.deps.health import HealthAggregator
 from memory_app.deps.state import AppState, app_state
@@ -53,5 +52,4 @@ __all__ = [
     "get_memory_graph",
     "get_mongo_repo",
     "get_entity_store",
-    "require_api_auth",
 ]

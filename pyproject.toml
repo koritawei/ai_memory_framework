@@ -1,28 +1,30 @@
 [project]
 name = "memory-service"
 version = "0.1.0"
-description = "AI Memory 系统 — 分层认知记忆架构"
+description = "AI Memory 系统 — 分层认知记忆架构（Phase 0–8 生产服务）"
 requires-python = ">=3.11"
 readme = "README.md"
 
 dependencies = [
-"fastapi>=0.115.0",
-"uvicorn[standard]>=0.30.0",
-"pydantic>=2.7.0",
-"pydantic-settings>=2.4.0",
-"motor>=3.6.0",
-"elasticsearch[async]>=8.13.0",
-"pymilvus>=2.4.0",
-"redis[hiredis]>=5.0.0",
-"PyYAML>=6.0",
-"jsonschema>=4.22.0",
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.7.0",
+  "pydantic-settings>=2.4.0",
+  "motor>=3.6.0",
+  "elasticsearch[async]>=8.13.0",
+  "pymilvus>=2.4.0",
+  "redis[hiredis]>=5.0.0",
+  "PyYAML>=6.0",
+  "jsonschema>=4.22.0",
+  "prometheus-client>=0.20.0",
+  "PyJWT>=2.8.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-"pytest>=8.2.0",
-"pytest-asyncio>=0.23.0",
-"httpx>=0.27.0",
+  "pytest>=8.2.0",
+  "pytest-asyncio>=0.23.0",
+  "httpx>=0.27.0",
 ]
 
 [project.entry-points."memory_app.plugins"]
@@ -30,10 +32,11 @@ dev = [
 # qdrant_store = "memory_plugin_qdrant.store:QdrantVectorStore"
 
 [project.scripts]
-# 业务平面零硬依赖审计；CI 可直接 `uv run audit-no-hard-deps`
+# Phase 8 Step 8.1：业务平面零硬依赖审计；CI 可直接 `uv run audit-no-hard-deps`
 audit-no-hard-deps = "scripts.audit_no_hard_deps:main"
-# 统一 CLI 入口（HTTP / --local 双模 + uvicorn 托管）
+# 设计文档 附录 B：统一 CLI 入口（HTTP / --local 双模 + uvicorn 托管）
 memory = "memory_app.cli:main"
+memory-worker = "memory_app.worker:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -51,10 +54,10 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra --strict-markers"
 markers = [
-"integration: 需要外部依赖的集成测试（默认 -m 'not integration' 跳过）",
+  "integration: 需要外部依赖的集成测试（默认 -m 'not integration' 跳过）",
 ]
 filterwarnings = [
-"ignore::DeprecationWarning",
+  "ignore::DeprecationWarning",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -70,9 +73,9 @@ strict = false
 # pydantic 模型识别
 plugins = ["pydantic.mypy"]
 exclude = [
-"^tests/",
-"^test_suite/",
-"^scripts/",
+  "^tests/",
+  "^test_suite/",
+  "^scripts/",
 ]
 
 [tool.ruff]
@@ -81,18 +84,18 @@ line-length = 100
 
 [tool.ruff.lint]
 select = [
-"E",   # pycodestyle errors
-"F",   # pyflakes
-"I",   # isort
-"UP",  # pyupgrade（推动现代语法）
-"B",   # flake8-bugbear（常见坑：可变默认参数等）
-"SIM", # flake8-simplify
-"RUF", # ruff 自有规则
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade（推动现代语法）
+  "B",   # flake8-bugbear（常见坑：可变默认参数等）
+  "SIM", # flake8-simplify
+  "RUF", # ruff 自有规则
 ]
 ignore = [
-"E501",   # 长行交给 black/格式化器
-"B008",   # FastAPI Depends / Query 等需要在默认值里调函数
-"SIM108", # if-else vs 三元，按可读性选择
+  "E501",   # 长行交给 black/格式化器
+  "B008",   # FastAPI Depends / Query 等需要在默认值里调函数
+  "SIM108", # if-else vs 三元，按可读性选择
 ]
 
 [tool.ruff.lint.per-file-ignores]

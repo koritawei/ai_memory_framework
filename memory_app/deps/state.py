@@ -4,7 +4,7 @@
 本类只承担三件事
 ═══════════════════════════════════════════════════════════════════════════════
 1. **字段容器**:外部客户端(委托 :class:`ExternalClients`)+ 横切组件
-   (ConfigCenter / PluginFactory) + 各业务服务
+   (ConfigCenter / PluginFactory)+ 各 Phase 业务服务
 2. **生命周期编排**:
    - :meth:`init`  → ExternalClients.init → ConfigCenter/PluginFactory →
      按顺序遍历 :data:`BUILDERS` → 各 builder.build
@@ -15,10 +15,10 @@
 历史上单文件 ``deps.py`` 1061 行的"上帝类"已拆为:
 - ``deps/clients.py``     外部客户端组
 - ``deps/health.py``      健康聚合
-- ``deps/builders/*.py``  6 个业务 builder（每个 ≤120 行）
+- ``deps/builders/*.py``  6 个 Phase builder(每个 ≤120 行)
 - ``deps/depends.py``     FastAPI Depends 工厂
 
-本文件应保持 ≤200 行。新增业务能力时**只**追加 builder，不改本文件。
+本文件应保持 ≤200 行。新增 Phase 时**只**追加 builder,不改本文件。
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ class AppState:
     属性约定:
     - :attr:`clients` 始终非 None;其内部子客户端按可达性 init
     - :attr:`config_center` 与 :attr:`plugin_factory` 是必启项 —— init 失败抛
-    - 各业务服务字段在对应 builder 装配失败时保持 None，Depends 工厂
+    - 各 Phase 业务服务字段在对应 builder 装配失败时保持 None,Depends 工厂
       据此抛 503
     """
 
@@ -103,7 +103,7 @@ class AppState:
     # 生命周期
     # ════════════════════════════════════════════════════════════════════════
     async def init(self, settings: Settings | None = None) -> None:
-        """启动期初始化：外部客户端 → 配置中心 → 插件工厂 → 各业务 builder。"""
+        """启动期初始化:外部客户端 → 配置中心 → 插件工厂 → 各 Phase builder。"""
         self.settings = settings or get_settings()
 
         # 1. ConfigCenter —— 必启项
@@ -147,7 +147,7 @@ class AppState:
         # 5. 外部客户端组(lazy & non-blocking)
         await self.clients.init(self.settings)
 
-        # 6. 按顺序遍历 BUILDERS —— 任一 builder 失败仅 warn
+        # 6. 按顺序遍历 BUILDERS —— 任一 Phase 失败仅 warn
         for builder in BUILDERS:
             if not builder.can_build(self):
                 logger.info(

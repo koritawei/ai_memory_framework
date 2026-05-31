@@ -1,9 +1,9 @@
-"""DLQ(Dead Letter Queue)—— 三库同步失败时的降级队列。
+"""DLQ(Dead Letter Queue)—— 三库同步失败时的降级队列(设计文档 §5.4 / §12.9)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 为什么需要 DLQ
 ═══════════════════════════════════════════════════════════════════════════════
- 双库一致性契约:**MongoDB 是 SOT,ES + Milvus 是从属索引**。
+设计文档 §5.2 双库一致性契约:**MongoDB 是 SOT,ES + Milvus 是从属索引**。
 
 写入热路径若 ES 或 Milvus 失败:
 - **不**回滚 MongoDB(否则一次外部抖动让用户看到 ingest 失败)
@@ -15,7 +15,7 @@
 ═══════════════════════════════════════════════════════════════════════════════
 - :class:`DLQRecord`            一条 DLQ 记录的数据模型
 - :class:`InMemoryDLQ`          进程内 DLQ(测试 / 开发态默认)
-- 生产 ``MongoDLQStore`` / ``RedisDLQStore`` 在 离线巩固+ 落地;接口签名同此
+- 生产 ``MongoDLQStore`` / ``RedisDLQStore`` 在 Phase 6+ 落地;接口签名同此
 
 ═══════════════════════════════════════════════════════════════════════════════
 DLQRecord 字段
@@ -67,6 +67,10 @@ class DLQProto(Protocol):
     async def enqueue(self, record: DLQRecord) -> None: ...
     async def list(self, target: str | None = None, limit: int = 50) -> list[DLQRecord]: ...
     async def size(self) -> int: ...
+    async def remove(self, target: str, mem_cell_id: str) -> bool: ...
+    async def bump_retry(
+        self, target: str, mem_cell_id: str, *, error: str
+    ) -> bool: ...
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -113,6 +117,27 @@ class InMemoryDLQ:
     async def size(self) -> int:
         async with self._lock:
             return len(self._buffer)
+
+    async def remove(self, target: str, mem_cell_id: str) -> bool:
+        async with self._lock:
+            kept = [
+                r
+                for r in self._buffer
+                if not (r.target == target and r.mem_cell_id == mem_cell_id)
+            ]
+            if len(kept) == len(self._buffer):
+                return False
+            self._buffer = deque(kept, maxlen=self._buffer.maxlen)
+            return True
+
+    async def bump_retry(self, target: str, mem_cell_id: str, *, error: str) -> bool:
+        async with self._lock:
+            for rec in self._buffer:
+                if rec.target == target and rec.mem_cell_id == mem_cell_id:
+                    rec.retry_count += 1
+                    rec.error = error
+                    return True
+        return False
 
     def clear(self) -> None:
         """清空。仅供测试。"""

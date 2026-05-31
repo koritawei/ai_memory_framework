@@ -48,6 +48,23 @@ def _write_bootstrap(path: Path, **overrides) -> None:
         "config_center_file_path": "config/default.yaml",
         "auth_enabled": False,
         "admin_api_key": None,
+        "api_key": None,
+        "tenant_binding_enabled": False,
+        "trust_gateway_headers": False,
+        "jwt_secret": None,
+        "jwt_algorithm": "HS256",
+        "api_key_bindings": {},
+        "dlq_backend": "memory",
+        "task_runner_backend": "asyncio",
+        "task_queue_key": "memory:tasks:cold_path",
+        "metrics_enabled": False,
+        "rate_limit_enabled": False,
+        "rate_limit_rpm": 120,
+        "rate_limit_backend": "memory",
+        "dlq_reconcile_interval_s": 0,
+        "dlq_reconcile_batch_size": 100,
+        "dlq_reconcile_max_retries": 5,
+        "task_runner_consumer_enabled": True,
         "discover_entry_point_plugins": True,
         "plugin_entry_point_group": "memory_app.plugins",
         "strict_readiness": False,
@@ -60,7 +77,7 @@ def _write_bootstrap(path: Path, **overrides) -> None:
 # 仓库内 bootstrap.yaml 的"现实情况"测试
 # ─────────────────────────────────────────────────────────────────────────────
 def test_loads_from_shipped_bootstrap_yaml(project_cwd):
-    """仓库内的 config/bootstrap.yaml 必须能被 Settings 直接加载。"""
+    """仓库内的 config/bootstrap.yaml 必须能被 Settings() 直接加载。"""
     reset_settings_for_test()
     s = Settings()
     # 这些值必须与 config/bootstrap.yaml 保持同步
@@ -147,6 +164,20 @@ def test_yaml_partial_env_补齐(tmp_path: Path, monkeypatch):
         "CONFIG_CENTER_BACKEND": "file",
         "CONFIG_CENTER_FILE_PATH": "x.yaml",
         "AUTH_ENABLED": "false",
+        "TENANT_BINDING_ENABLED": "false",
+        "TRUST_GATEWAY_HEADERS": "false",
+        "JWT_ALGORITHM": "HS256",
+        "DLQ_BACKEND": "memory",
+        "TASK_RUNNER_BACKEND": "asyncio",
+        "TASK_QUEUE_KEY": "memory:tasks:cold_path",
+        "METRICS_ENABLED": "false",
+        "RATE_LIMIT_ENABLED": "false",
+        "RATE_LIMIT_RPM": "120",
+        "RATE_LIMIT_BACKEND": "memory",
+        "DLQ_RECONCILE_INTERVAL_S": "0",
+        "DLQ_RECONCILE_BATCH_SIZE": "100",
+        "DLQ_RECONCILE_MAX_RETRIES": "5",
+        "TASK_RUNNER_CONSUMER_ENABLED": "true",
         "DISCOVER_ENTRY_POINT_PLUGINS": "true",
         "PLUGIN_ENTRY_POINT_GROUP": "memory_app.plugins",
         "STRICT_READINESS": "false",
@@ -183,7 +214,7 @@ def test_no_hardcoded_field_defaults():
     """除 admin_api_key 外，Settings 类不应有任何字段默认值（确保都来自 YAML/env）。"""
     fields = Settings.model_fields
     # 允许的"显式无值"字段
-    allowed_optional = {"admin_api_key"}
+    allowed_optional = {"admin_api_key", "api_key", "jwt_secret", "api_key_bindings"}
     hardcoded = []
     for name, info in fields.items():
         if name in allowed_optional:

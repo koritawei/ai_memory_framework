@@ -10,21 +10,7 @@
 
 from __future__ import annotations
 
-from fastapi import Header
-
 from memory_app.deps.state import app_state
-from memory_app.security import verify_api_key
-
-
-def require_api_auth(
-    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
-) -> None:
-    """业务面鉴权：``auth_enabled=true`` 时要求有效 API Key。"""
-    settings = app_state.settings
-    if settings is None:
-        return
-    verify_api_key(x_admin_key, x_api_key, settings)
 
 
 def get_ingest_service():
@@ -40,27 +26,27 @@ def get_ingest_service():
 
 
 def get_consolidation_service():
-    """取 ConsolidationService(离线巩固);未装配返回 ``None``。"""
+    """取 ConsolidationService(Phase 6);未装配返回 ``None``。"""
     return app_state.consolidation_service
 
 
 def get_memory_graph():
-    """取 MemoryGraph(图与实体);未装配返回 ``None``。"""
+    """取 MemoryGraph(Phase 7);未装配返回 ``None``。"""
     return app_state.memory_graph
 
 
 def get_mongo_repo():
-    """取共享 MongoMemCellRepo(图与实体+);未装配返回 ``None``。"""
+    """取共享 MongoMemCellRepo(Phase 7+);未装配返回 ``None``。"""
     return app_state.mongo_repo
 
 
 def get_entity_store():
-    """取 EntityStore(图与实体);未装配返回 ``None``。"""
+    """取 EntityStore(Phase 7);未装配返回 ``None``。"""
     return app_state.entity_store
 
 
 def get_feedback_service():
-    """取 FeedbackService(反馈与生命周期);未装配抛 503。"""
+    """取 FeedbackService(Phase 5);未装配抛 503。"""
     from fastapi import HTTPException, status
 
     if app_state.feedback_service is None:
@@ -72,7 +58,7 @@ def get_feedback_service():
 
 
 def get_retrieval_orchestrator():
-    """取 RetrievalOrchestrator(检索);未装配抛 503。"""
+    """取 RetrievalOrchestrator(Phase 4);未装配抛 503。"""
     from fastapi import HTTPException, status
 
     if app_state.retrieval_orchestrator is None:
@@ -91,5 +77,4 @@ __all__ = [
     "get_memory_graph",
     "get_mongo_repo",
     "get_entity_store",
-    "require_api_auth",
 ]

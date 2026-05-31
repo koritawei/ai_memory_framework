@@ -1,7 +1,7 @@
-"""``/v1/admin/*`` 管理面 API。
+"""``/v1/admin/*`` 管理面 API(设计文档 §2.5 / §2.7.4 / §2.8.4.1 / Phase 8 Step 8.3)。
 
 ═══════════════════════════════════════════════════════════════════════════════
-端点(脚手架 + 管理面 完整化)
+端点(Phase 0 + Phase 8 完整化)
 ═══════════════════════════════════════════════════════════════════════════════
 
 | 方法   | 路径                                                 | 阶段   |
@@ -26,11 +26,10 @@
 ═══════════════════════════════════════════════════════════════════════════════
 两道闸:
 
-1. **总开关** ``settings.auth_enabled`` —— 关闭时业务面 ``/v1/memory/*``、``/v1/query/*`` 自由访问；
-   开启时要求 ``X-API-Key`` 或 ``X-Admin-Key``（值均为 ``admin_api_key``）。
-2. **API Key** ``settings.admin_api_key`` —— 配置后 **管理面始终** 要求 ``X-Admin-Key`` 匹配
-   （即使 ``auth_enabled=false``，防止误配 key 仍暴露管理面）。
-   未配置 key 且 ``auth_enabled=true`` 时管理面直接 403。
+1. **API Key** ``settings.admin_api_key`` —— 配置后**始终**要求 ``X-Admin-Key``
+   匹配(即使 ``auth_enabled=false``);未配置且 ``auth_enabled=true`` 时 403。
+2. **总开关** ``settings.auth_enabled`` —— 仅影响业务面 Bearer 鉴权;不影响
+   已配置 ``admin_api_key`` 时的管理面校验。
 
 生产环境应在网关层再加 IP 白名单作为第三道防护。
 """
@@ -47,29 +46,15 @@ from memory_app.config_center import (
     ConfigValidationError,
     PromptNotFoundError,
 )
-from memory_app.deps.state import app_state
-from memory_app.security import verify_admin_key
+from memory_app.deps import app_state
 from memory_app.plugins import registry as plugin_registry
 from memory_app.prompt_manager.manager import _format_template
+from memory_app.security.auth import check_admin_key
 
 logger = logging.getLogger(__name__)
 
 #: 路由前缀 ``/v1/admin``
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# 鉴权
-# ════════════════════════════════════════════════════════════════════════════
-def _check_admin_key(x_admin_key: str | None) -> None:
-    """校验 X-Admin-Key 头。规则见模块 docstring。
-
-    :raises HTTPException: 403 当鉴权失败
-    """
-    settings = app_state.settings
-    if settings is None:
-        return
-    verify_admin_key(x_admin_key, settings)
 
 
 def _require_config_center():
@@ -91,14 +76,14 @@ async def list_plugins(
 ):
     """列出所有已注册插件 + 当前活动实例。
 
-    管理面 完整化时将增补:``/{category}/{name}/reload`` 与
+    Phase 8 完整化时将增补:``/{category}/{name}/reload`` 与
     ``/{category}/{name}/health``。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     return {
-        # registry.describe 给出 "类层"快照(已注册的所有类)
+        # registry.describe() 给出 "类层"快照(已注册的所有类)
         "categories": plugin_registry.describe(),
-        # plugin_factory.list_active 给出 "实例层"快照(已 start 的实例)
+        # plugin_factory.list_active() 给出 "实例层"快照(已 start 的实例)
         "active": app_state.plugin_factory.list_active() if app_state.plugin_factory else [],
     }
 
@@ -107,19 +92,19 @@ async def list_plugins(
 async def plugins_health(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ):
-    """聚合所有活动插件实例的 ``health`` 输出。
+    """聚合所有活动插件实例的 ``health()`` 输出。
 
     与 ``/health/ready`` 的区别:本端点报告**插件实例级**健康,``/health/ready``
     报告**外部依赖级**健康;二者互补。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     if app_state.plugin_factory is None:
         return {}
     return await app_state.plugin_factory.healthcheck_all()
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# Prompt 管理面( / )
+# Prompt 管理面(§2.8.4.1 / Step 0.7)
 # ════════════════════════════════════════════════════════════════════════════
 @router.get("/prompts")
 async def list_prompts(
@@ -128,7 +113,7 @@ async def list_prompts(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ):
     """列出所有可见 prompt_id。"""
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     ids = await cc.list_prompt_ids(include_builtin=include_builtin, tag=tag)  # type: ignore[attr-defined]
     return {"prompts": ids, "total": len(ids)}
@@ -146,7 +131,7 @@ async def get_prompt(
     带 ``?tenant_id=&user_id=`` 时按五级覆盖 + 灰度规则解析,响应 ``source``
     字段标明命中层(default / global / tenant / user / variant / builtin)。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     try:
         resolved = await cc.resolve_prompt(  # type: ignore[attr-defined]
@@ -169,7 +154,7 @@ async def get_prompt_history(
 
     File 后端在进程内环形缓冲(约 200 条,重启丢失);Mongo 后端持久化。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     history = await cc.history_prompt(prompt_id, limit=limit)  # type: ignore[attr-defined]
     return {"prompt_id": prompt_id, "history": history, "count": len(history)}
@@ -195,7 +180,7 @@ async def write_prompt(
 
     ``scope=tenant|user`` 时必须提供 ``scope_id``。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     try:
         version = await cc.write_prompt(  # type: ignore[attr-defined]
@@ -227,11 +212,11 @@ async def delete_prompt(
 ):
     """清除指定 scope 下的 prompt 覆盖。
 
-    脚手架 实现:写入一个 placeholder template 标记为"已删除"——后续
+    Phase 0 实现:写入一个 placeholder template 标记为"已删除"——后续
     resolve 仍能拿到,但 template 是 ``<<DELETED>>``,业务方据此识别。
-    管理面 引入 ``_delete_entry`` hook 后会改为真正物理删除。
+    Phase 8 Step 8.3 引入 ``_delete_entry`` hook 后会改为真正物理删除。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     placeholder_body = {
         "template": "<<DELETED>>",
@@ -251,7 +236,7 @@ async def delete_prompt(
         "scope": scope,
         "scope_id": scope_id,
         "deleted": True,
-        "note": "marked as deleted via placeholder; full delete in 管理面",
+        "note": "marked as deleted via placeholder; full delete in Phase 8.3",
     }
 
 
@@ -267,7 +252,7 @@ async def render_prompt(
 
     ``payload`` 形如 ``{"variables": {"text": "我下周去北京"}}``。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     # 关键:用 is None 区分"未传"与"传了非 dict";旧版 `or {}` 让任何
     # falsy 非 dict 值(``[]`` / ``""`` / ``0``)被无声转成空 dict,
@@ -305,7 +290,7 @@ async def render_prompt(
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 管理面:单插件 health / reload
+# Phase 8 Step 8.3:单插件 health / reload
 # ════════════════════════════════════════════════════════════════════════════
 @router.get("/plugins/{category}/{name}/health")
 async def plugin_health(
@@ -316,9 +301,9 @@ async def plugin_health(
     """单个插件实例健康检查。
 
     若该 ``(category, name)`` 当前无活动实例,返回 ``status="not_active"``;
-    实例 ``health`` 抛错时返回 ``status="fail"``。
+    实例 ``health()`` 抛错时返回 ``status="fail"``。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     if app_state.plugin_factory is None:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, detail="plugin_factory not initialized"
@@ -345,7 +330,7 @@ async def plugin_reload(
 
     返回 ``released_count`` 即被释放的实例数。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     if app_state.plugin_factory is None:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, detail="plugin_factory not initialized"
@@ -363,7 +348,7 @@ async def plugin_reload(
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 管理面:配置 CRUD
+# Phase 8 Step 8.3:配置 CRUD
 # ════════════════════════════════════════════════════════════════════════════
 @router.get("/config")
 async def get_config(
@@ -377,7 +362,7 @@ async def get_config(
     响应字段 ``source`` 标明命中层(default / global / tenant / user / variant),
     便于运维排查"为什么这个用户走了 hybrid_sbd"。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     try:
         resolved = await cc.resolve(category, tenant_id=tenant_id, user_id=user_id)
@@ -418,7 +403,7 @@ async def write_config(
     ``scope=tenant|user`` 时必须提供 ``scope_id``;``gray_rules`` 为可选灰度
     变体列表,每条形如 ``{"match": {...}, "name"/"params": ...}``。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     try:
         version = await cc.write(
@@ -459,7 +444,7 @@ async def get_config_history(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ):
     """返回 ``category`` 的历史版本(最新优先)。"""
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     try:
         history = await cc.history(category, limit=limit)
@@ -491,7 +476,7 @@ async def rollback_config(
     实现策略:从 ``history`` 找到 ``target_version`` 的快照 → 当成新一次 ``write``
     重新落库,从而保留完整审计链。本端点**不**销毁现有数据,仅"前进式回退"。
     """
-    _check_admin_key(x_admin_key)
+    check_admin_key(x_admin_key)
     cc = _require_config_center()
     try:
         history = await cc.history(body.category, limit=500)
@@ -550,3 +535,86 @@ async def rollback_config(
         "scope_id": body.scope_id,
         "actor": body.actor,
     }
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# DLQ / SyncReconciler（§5.4 / §12.9）
+# ════════════════════════════════════════════════════════════════════════════
+def _require_reconciler():
+    from memory_app.reconciliation.sync_reconciler import build_reconciler_from_state
+
+    rec = build_reconciler_from_state(app_state)
+    if rec is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="sync reconciler not available (dlq or mongo_repo missing)",
+        )
+    return rec
+
+
+@router.get("/dlq")
+async def list_dlq(
+    target: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+):
+    """列出 DLQ 记录（最新优先）。"""
+    check_admin_key(x_admin_key)
+    rec = _require_reconciler()
+    records = await rec.list_records(target=target, limit=limit)
+    return {
+        "total": len(records),
+        "records": [r.model_dump(mode="json") for r in records],
+    }
+
+
+@router.get("/dlq/stats")
+async def dlq_stats(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+):
+    """DLQ 积压统计（按 target 分组）。"""
+    check_admin_key(x_admin_key)
+    rec = _require_reconciler()
+    return await rec.stats()
+
+
+class DLQReconcileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target: str | None = Field(default=None, description="es | milvus | 省略=全部")
+    limit: int = Field(default=100, ge=1, le=1000)
+    dry_run: bool = False
+
+
+@router.post("/dlq/reconcile")
+async def dlq_reconcile(
+    body: DLQReconcileRequest | None = Body(default=None),
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+):
+    """触发 DLQ 重试：从 Mongo SOT 重建 ES/Milvus 索引。
+
+    ``dry_run=true`` 时只扫描不写入。
+    """
+    check_admin_key(x_admin_key)
+    req = body or DLQReconcileRequest()
+    rec = _require_reconciler()
+    try:
+        report = await rec.reconcile(
+            target=req.target,
+            limit=req.limit,
+            dry_run=req.dry_run,
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.error("dlq reconcile failed: %s", e)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"reconcile failed: {e.__class__.__name__}",
+        )
+    logger.info(
+        "dlq reconcile by admin: scanned=%d ok=%d fail=%d dry_run=%s",
+        report["scanned"],
+        report["succeeded"],
+        report["failed"],
+        req.dry_run,
+    )
+    return report

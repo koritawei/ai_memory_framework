@@ -1,4 +1,4 @@
-"""FeedbackLifecycleBuilder —— 反馈与生命周期 反馈 + 生命周期 + 重要性评分装配。"""
+"""FeedbackLifecycleBuilder —— Phase 5 反馈 + 生命周期 + 重要性评分装配。"""
 
 from __future__ import annotations
 
@@ -44,18 +44,18 @@ class FeedbackLifecycleBuilder(ServiceBuilder):
             mongo_repo=mongo_repo, reinforcer=reinforcer
         )
 
-        # LifecycleUpdater:基于 BackgroundTaskRunner 触发(可无)
+        # LifecycleUpdater(Step 5.2):基于 BackgroundTaskRunner 触发(可无)
         state.lifecycle_updater = LifecycleUpdater(
             mongo_repo=mongo_repo, runner=state.background_runner
         )
 
-        # ImportanceScorer:可选
+        # ImportanceScorer(Step 5.3):可选
         try:
             state.importance_scorer = await state.plugin_factory.build(
                 "memory.lifecycle.importance_scorer"
             )
         except LookupError:
-            logger.debug("importance_scorer not configured (反馈与生命周期 optional)")
+            logger.debug("importance_scorer not configured (Phase 5 optional)")
         except Exception as e:  # noqa: BLE001
             logger.warning("importance_scorer build failed: %s", e)
 

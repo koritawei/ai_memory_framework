@@ -1,4 +1,4 @@
-"""ConsolidationServiceBuilder —— 离线巩固 离线巩固装配。"""
+"""ConsolidationServiceBuilder —— Phase 6 离线巩固装配。"""
 
 from __future__ import annotations
 

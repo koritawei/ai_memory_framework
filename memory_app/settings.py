@@ -1,4 +1,4 @@
-"""启动期不可变配置（pydantic-settings v2，对齐）。
+"""启动期不可变配置（pydantic-settings v2，对齐设计文档 §2.8.6.2）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 Settings 与 ConfigCenter 的边界
@@ -11,7 +11,7 @@ Settings 与 ConfigCenter 的边界
 - 启动期行为：是否扫描第三方 entry-point 插件、健康检查严格度
 
 所有运行时可调参数（阈值 / 权重 / 模型名 / cron 等）走 :mod:`memory_app.config_center`，
-不在此声明。这与 「单一事实源」原则严格对齐 —— 避免「环境变量与配置中心
+不在此声明。这与 §2.8.1「单一事实源」原则严格对齐 —— 避免「环境变量与配置中心
 两套真值源」的歧义。
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -128,7 +128,7 @@ class Settings(BaseSettings):
     """启动期不可变配置。
 
     所有字段（除 ``admin_api_key``）都没有 Python 默认值；缺失即 ``ValidationError``，
-    强制运维通过 YAML 或 env 显式声明。这是  中的关键设计决策。
+    强制运维通过 YAML 或 env 显式声明。这是 §2.8.6.2 中的关键设计决策。
     """
 
     # ── 服务元信息 ──
@@ -160,6 +160,33 @@ class Settings(BaseSettings):
     #: 唯一允许 Optional 的字段：null = 未配置，配置后启用 X-Admin-Key 校验。
     #: 该字段用 None 而非空字符串便于明确区分「未配置」与「显式配置为空」。
     admin_api_key: str | None = None
+    #: 业务 API Bearer 令牌；``auth_enabled=true`` 且非 null 时，
+    #: ``/v1/memory/*`` / ``/v1/query/*`` 要求 ``Authorization: Bearer``。
+    api_key: str | None = None
+    #: true 时请求体 ``tenant_id`` / ``user_id`` 必须与 API Key 绑定或 JWT claim 一致
+    tenant_binding_enabled: bool
+    trust_gateway_headers: bool
+    jwt_secret: str | None = None
+    jwt_algorithm: str
+    #: ``{api_key: {tenant_id, user_id?}}`` —— 静态密钥到租户映射
+    api_key_bindings: dict[str, dict[str, str]] | None = None
+
+    # ── DLQ / 后台任务 ──
+    dlq_backend: Literal["memory", "mongo", "redis"]
+    task_runner_backend: Literal["asyncio", "redis"]
+    task_queue_key: str
+
+    # ── 可观测 / 限流 ──
+    metrics_enabled: bool
+    rate_limit_enabled: bool
+    rate_limit_rpm: int
+    rate_limit_backend: Literal["memory", "redis"]
+
+    # ── DLQ Reconciler ──
+    dlq_reconcile_interval_s: int
+    dlq_reconcile_batch_size: int
+    dlq_reconcile_max_retries: int
+    task_runner_consumer_enabled: bool
 
     # ── 启动行为 ──
     #: 是否扫描第三方包（``[project.entry-points."memory_app.plugins"]``）注册的插件
@@ -206,7 +233,7 @@ class Settings(BaseSettings):
 # ─────────────────────────────────────────────────────────────────────────────
 # 单例访问器
 # ─────────────────────────────────────────────────────────────────────────────
-# 模块级单例：避免每次 ``get_settings`` 都重新解析 YAML / env
+# 模块级单例：避免每次 ``get_settings()`` 都重新解析 YAML / env
 _settings: Settings | None = None
 
 

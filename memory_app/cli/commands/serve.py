@@ -49,7 +49,7 @@ class ServeCommand(Command):
                 "--log-level", args.log_level, "--reload",
             ]
             return subprocess.call(cmd)
-        # 常规模式:在当前事件循环里跑 uvicorn.Server.serve(async)
+        # 常规模式:在当前事件循环里跑 uvicorn.Server.serve()(async)
         config = uvicorn.Config(
             "memory_app.api:app",
             host=args.host,

@@ -1,4 +1,4 @@
-"""``/v1/memory/feedback`` 路由。
+"""``/v1/memory/feedback`` 路由(设计文档 §7.5,Phase 5 Step 5.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 契约
@@ -21,16 +21,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from memory_app.deps import get_feedback_service, require_api_auth
+from memory_app.deps import get_feedback_service
 from memory_app.schemas.feedback import FeedbackRequest
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/v1/memory",
-    tags=["memory"],
-    dependencies=[Depends(require_api_auth)],
-)
+router = APIRouter(prefix="/v1/memory", tags=["memory"])
 
 
 class FeedbackResponse(BaseModel):

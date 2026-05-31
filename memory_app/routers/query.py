@@ -1,4 +1,4 @@
-"""``/v1/query/*`` 只读图查询。
+"""``/v1/query/*`` 只读图查询(设计文档 §8 / Phase 7 Step 7.4)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 端点
@@ -19,15 +19,11 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from memory_app.deps import get_memory_graph, get_mongo_repo, require_api_auth
+from memory_app.deps import get_memory_graph, get_mongo_repo
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/v1/query",
-    tags=["query"],
-    dependencies=[Depends(require_api_auth)],
-)
+router = APIRouter(prefix="/v1/query", tags=["query"])
 
 
 # ════════════════════════════════════════════════════════════════════════════

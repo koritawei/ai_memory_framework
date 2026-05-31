@@ -40,7 +40,7 @@ class HealthAggregator:
         out["config_center"] = await self._check_config_center()
         out["plugin_registry"] = {
             "status": "ok",
-            "detail": f"categories={len(plugin_registry.categories)}",
+            "detail": f"categories={len(plugin_registry.categories())}",
         }
         return out
 

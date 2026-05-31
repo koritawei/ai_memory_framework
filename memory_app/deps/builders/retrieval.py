@@ -1,4 +1,4 @@
-"""RetrievalOrchestratorBuilder —— 检索 检索五阶段装配。"""
+"""RetrievalOrchestratorBuilder —— Phase 4 检索五阶段装配。"""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ class RetrievalOrchestratorBuilder(ServiceBuilder):
             reranker = None
             logger.warning("retrieval: reranker not configured")
 
-        # 3. filter(单一插件;检索+ 可拓展为链)
+        # 3. filter(单一插件;Phase 4+ 可拓展为链)
         filters: list = []
         try:
             ft = await state.plugin_factory.build("memory.retrieval.filter")
