@@ -39,6 +39,8 @@ from memory_app.security.sanitize import escape_milvus_expr_string
 
 logger = logging.getLogger(__name__)
 
+_MILVUS_FILTER_FIELD_ALLOWLIST = frozenset({"memory_type", "state"})
+
 
 class VectorChannel(BaseRetrievalChannel):
     """Milvus 向量召回。"""
@@ -108,22 +110,23 @@ class VectorChannel(BaseRetrievalChannel):
             )
         q_vec = list(embeddings[0])
 
-        # 2. 构造表达式 —— 字符串值必须转义,防止租户隔离被注入式 user_id 击穿
+        # 2. 构造表达式 —— 字符串值经白名单校验 + 转义
         expr_parts = [
-            f'tenant_id == "{_escape_milvus_str(tenant_id)}"',
-            f'user_id == "{_escape_milvus_str(user_id)}"',
+            _milvus_eq("tenant_id", tenant_id),
+            _milvus_eq("user_id", user_id),
         ]
         for k, v in filters.items():
             if v is None:
                 continue
+            if k not in _MILVUS_FILTER_FIELD_ALLOWLIST:
+                logger.warning("vector channel ignoring disallowed filter key: %s", k)
+                continue
             if isinstance(v, str):
-                expr_parts.append(f'{k} == "{_escape_milvus_str(v)}"')
+                expr_parts.append(_milvus_eq(k, v))
             elif isinstance(v, bool):
-                # bool 必须在 int 之前判断(isinstance(True, int) 也为真)
-                expr_parts.append(f"{k} == {str(v).lower}")
+                expr_parts.append(f"{k} == {str(v).lower()}")
             elif isinstance(v, (int, float)):
                 expr_parts.append(f"{k} == {v}")
-            # list / dict 等结构化条件由调用方负责构造为简单等值过滤
         expr = " and ".join(expr_parts)
 
         # 3. search —— pymilvus Collection.search 是**阻塞**网络 I/O,直接 await
@@ -213,6 +216,13 @@ def _looks_blocking(collection: Any) -> bool:
     """
     mod = type(collection).__module__ or ""
     return mod.startswith("pymilvus")
+
+
+def _milvus_eq(field: str, value: str) -> str:
+    """构造 ``field == "value"`` 表达式片段（字段与值均校验）。"""
+    safe_field = escape_milvus_expr_string(field)
+    safe_value = escape_milvus_expr_string(str(value))
+    return f'{safe_field} == "{safe_value}"'
 
 
 def _escape_milvus_str(value: Any) -> str:

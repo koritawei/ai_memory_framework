@@ -67,11 +67,10 @@ class ColdPathServiceBuilder(ServiceBuilder):
             episode_extractor=episode_extractor,
             semantic_extractor=semantic_extractor,
             clusterer=clusterer,
+            llm_max_concurrent=state.settings.cold_path_llm_max_concurrent,
         )
         state.cold_path_service = ColdPathService(
-            pipeline=pipeline,
-            runner=state.background_runner,
-            max_parallel=state.settings.cold_path_max_parallel,
+            pipeline=pipeline, runner=state.background_runner
         )
 
         if isinstance(state.background_runner, RedisTaskRunner):
@@ -82,9 +81,30 @@ class ColdPathServiceBuilder(ServiceBuilder):
 
             async def _cold_path_handler(payload: dict) -> None:
                 mem_cell_id = payload.get("mem_cell_id", "")
+                tenant_id = payload.get("tenant_id")
+                user_id = payload.get("user_id")
                 if not mem_cell_id or mongo_repo is None:
                     return
-                cell = await mongo_repo.get_by_id(mem_cell_id)
+                scoped_get = getattr(mongo_repo, "get_by_id_scoped", None)
+                if (
+                    callable(scoped_get)
+                    and tenant_id
+                    and user_id
+                ):
+                    cell = await scoped_get(
+                        mem_cell_id, tenant_id=str(tenant_id), user_id=str(user_id)
+                    )
+                else:
+                    cell = await mongo_repo.get_by_id(mem_cell_id)
+                    if cell is not None and tenant_id and user_id and (
+                        cell.tenant_id != str(tenant_id)
+                        or cell.user_id != str(user_id)
+                    ):
+                        logger.warning(
+                            "cold_path redis rejected tenant mismatch for %s",
+                            mem_cell_id,
+                        )
+                        cell = None
                 if cell is None:
                     logger.warning("cold_path redis skip missing cell %s", mem_cell_id)
                     return

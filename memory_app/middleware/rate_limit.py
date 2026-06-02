@@ -40,7 +40,14 @@ class _MemoryBucket:
 class RateLimitMiddleware:
     """按 client IP（或 ``X-User-Id``）RPM 限流。"""
 
-    _SKIP_PREFIXES = ("/health/", "/metrics", "/docs", "/openapi.json", "/redoc")
+    _SKIP_PREFIXES = (
+        "/health/",
+        "/metrics",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/v1/admin/",
+    )
 
     def __init__(self, app, settings: Settings | None = None):
         self.app = app

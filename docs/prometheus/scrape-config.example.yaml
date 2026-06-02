@@ -1,0 +1,61 @@
+# Prometheus 抓取 Memory Service 示例
+# 复制到 prometheus.yml 的 scrape_configs，或 include 本文件。
+#
+# 前置：bootstrap.yaml 中 metrics_enabled: true
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: memory-service
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    static_configs:
+      - targets:
+          - memory-api:8000
+        labels:
+          service: memory
+          env: production
+
+  # 本地开发（API 监听 127.0.0.1:8000）
+  - job_name: memory-service-local
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - 127.0.0.1:8000
+        labels:
+          service: memory
+          env: development
+
+# ── 可选：告警规则片段（写入 rules/*.yml 并在 prometheus.yml 中 rule_files 引用）──
+#
+# groups:
+#   - name: memory-service
+#     rules:
+#       - alert: MemoryDLQBacklogHigh
+#         expr: memory_dlq_records > 100
+#         for: 10m
+#         labels:
+#           severity: warning
+#         annotations:
+#           summary: "Memory DLQ backlog > 100"
+#
+#       - alert: MemoryDLQReconcileFailing
+#         expr: sum(rate(memory_dlq_reconcile_failure_total[5m])) > 0.1
+#         for: 5m
+#         labels:
+#           severity: critical
+#         annotations:
+#           summary: "DLQ reconcile failures elevated"
+#
+#       - alert: MemoryHTTP5xxRateHigh
+#         expr: |
+#           sum(rate(memory_http_requests_total{status=~"5.."}[5m]))
+#           / sum(rate(memory_http_requests_total[5m])) > 0.05
+#         for: 5m
+#         labels:
+#           severity: critical
+#         annotations:
+#           summary: "Memory HTTP 5xx ratio > 5%"

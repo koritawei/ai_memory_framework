@@ -118,8 +118,14 @@ class EpisodeExtractStage(PipelineStage[ColdPathContext]):
 class SemanticExtractStage(PipelineStage[ColdPathContext]):
     name = "semantic_extract"
 
-    def __init__(self, extractor: _SemanticExtractorProto | None) -> None:
+    def __init__(
+        self,
+        extractor: _SemanticExtractorProto | None,
+        *,
+        llm_max_concurrent: int = 8,
+    ) -> None:
         self._extractor = extractor
+        self._llm_max_concurrent = max(1, int(llm_max_concurrent))
 
     async def run(self, ctx: ColdPathContext) -> ColdPathContext:
         if self._extractor is None:
@@ -128,12 +134,13 @@ class SemanticExtractStage(PipelineStage[ColdPathContext]):
         if not ctx.episodes:
             ctx.warnings.append("no_episodes_for_semantic")
             return ctx
-        # 并行抽取:每条 episode 是一次 LLM round-trip;5–20 段串行 = 5–60 秒。
-        # gather 让事件循环并行 await,把冷路径吞吐拉回 LLM 并发上限。
-        # 异常被 ``return_exceptions=True`` 捕获,单条失败不影响整体。
         import asyncio
-        results = await asyncio.gather(
-            *[self._extractor.extract_for_episode(ep) for ep in ctx.episodes],
+
+        from memory_app.concurrency import gather_with_limit
+
+        results = await gather_with_limit(
+            (self._extractor.extract_for_episode(ep) for ep in ctx.episodes),
+            self._llm_max_concurrent,
             return_exceptions=True,
         )
         all_semantics: list[SemanticMemory] = []
@@ -326,9 +333,12 @@ class ColdPathPipeline(BasePipeline[MemCell, ColdPathContext, ColdPathContext]):
         clusterer: _ClustererProto | None = None,
         scenario: ScenarioType = ScenarioType.GROUP_CHAT,
         extra_stages: list[PipelineStage[ColdPathContext]] | None = None,
+        llm_max_concurrent: int = 8,
     ) -> None:
         self._episode_stage = EpisodeExtractStage(episode_extractor)
-        self._semantic_stage = SemanticExtractStage(semantic_extractor)
+        self._semantic_stage = SemanticExtractStage(
+            semantic_extractor, llm_max_concurrent=llm_max_concurrent
+        )
         self._cluster_stage = ClusterStage(clusterer)
         self._scenario = scenario
         self._extra_stages: list[PipelineStage[ColdPathContext]] = list(

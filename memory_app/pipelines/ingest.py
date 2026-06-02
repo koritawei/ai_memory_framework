@@ -195,10 +195,12 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
         es_repo: _ESRepoProto | None = None,
         milvus_repo: _MilvusRepoProto | None = None,
         dlq: _DLQProto | None = None,
+        sync_max_concurrent: int = 32,
     ) -> None:
         self._es_repo = es_repo
         self._milvus_repo = milvus_repo
         self._dlq = dlq
+        self._sync_max_concurrent = max(1, int(sync_max_concurrent))
 
     @property
     def es_repo(self) -> _ESRepoProto | None:
@@ -265,8 +267,13 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                     user_id=cell.user_id if cell else None,
                 )
             return
-        # 回退:per-cell 并发
-        await asyncio.gather(*(self._sync_es(c, ctx) for c in ctx.cells))
+        # 回退:per-cell 有界并发
+        from memory_app.concurrency import gather_with_limit
+
+        await gather_with_limit(
+            (self._sync_es(c, ctx) for c in ctx.cells),
+            self._sync_max_concurrent,
+        )
 
     # ────────────────────────────────────────────────────────────────────────
     # Milvus 批量(优先) / per-cell 回退
@@ -321,8 +328,13 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                     user_id=cell.user_id if cell else None,
                 )
             return
-        # 回退:per-cell 并发
-        await asyncio.gather(*(self._sync_milvus(c, ctx) for c in ctx.cells))
+        # 回退:per-cell 有界并发
+        from memory_app.concurrency import gather_with_limit
+
+        await gather_with_limit(
+            (self._sync_milvus(c, ctx) for c in ctx.cells if c.embedding),
+            self._sync_max_concurrent,
+        )
 
     # ────────────────────────────────────────────────────────────────────────
     async def _sync_es(self, cell: MemCell, ctx: IngestPipelineContext) -> None:
@@ -424,13 +436,17 @@ class IngestPipeline(
         milvus_repo: _MilvusRepoProto | None = None,
         dlq: _DLQProto | None = None,
         extra_stages: list[PipelineStage[IngestPipelineContext]] | None = None,
+        sync_index_max_concurrent: int = 32,
     ) -> None:
         self._segment_stage = SegmentStage(segmenter)
         self._persist_stage = PersistMemCellStage(mem_cell_repo)
         # SyncIndexStage 始终插入,内部据 repo 为 None 决定是否真做事;
         # 让"关闭 ES 同步"不需要重组 stages 列表
         self._sync_stage = SyncIndexStage(
-            es_repo=es_repo, milvus_repo=milvus_repo, dlq=dlq
+            es_repo=es_repo,
+            milvus_repo=milvus_repo,
+            dlq=dlq,
+            sync_max_concurrent=sync_index_max_concurrent,
         )
         self._extra_stages: list[PipelineStage[IngestPipelineContext]] = list(
             extra_stages or []

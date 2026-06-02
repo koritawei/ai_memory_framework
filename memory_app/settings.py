@@ -175,8 +175,10 @@ class Settings(BaseSettings):
     dlq_backend: Literal["memory", "mongo", "redis"]
     task_runner_backend: Literal["asyncio", "redis"]
     task_queue_key: str
-    task_runner_max_concurrent: int
-    cold_path_max_parallel: int
+    # ── 并发预算（防止无界 fan-out）──
+    background_max_concurrent: int
+    sync_index_max_concurrent: int
+    cold_path_llm_max_concurrent: int
 
     # ── 可观测 / 限流 ──
     metrics_enabled: bool

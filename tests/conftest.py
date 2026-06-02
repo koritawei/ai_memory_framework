@@ -28,6 +28,7 @@ def _isolate_settings(monkeypatch):
         "MEMORY_STRICT_READINESS",
     ):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("MEMORY_DEBUG", "true")
     reset_settings_for_test()
     reset_prompt_manager_for_test()
     yield

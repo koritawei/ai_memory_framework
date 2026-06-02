@@ -27,35 +27,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
 from memory_app.repositories.dlq import DLQRecord
+from memory_app.task_queue.retry import RetryPolicy
 
 logger = logging.getLogger(__name__)
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# 重试策略
-# ════════════════════════════════════════════════════════════════════════════
-@dataclass
-class RetryPolicy:
-    """指数退避策略。"""
-
-    max_attempts: int = 3
-    base_delay_s: float = 0.05
-    max_delay_s: float = 5.0
-    backoff: float = 4.0  # delay = base * backoff^(attempt-1),封顶 max_delay
-
-    def delay_for(self, attempt: int) -> float:
-        """``attempt`` 是第几次重试(从 1 开始)。"""
-        d = self.base_delay_s * (self.backoff ** max(0, attempt - 1))
-        return min(d, self.max_delay_s)
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# DLQ 协议
-# ════════════════════════════════════════════════════════════════════════════
+# RetryPolicy 已迁至 task_queue.retry；此处 re-export 保持向后兼容。
 class _DLQLike:
     """DLQ 鸭子类型协议 —— 只要 ``await dlq.enqueue(...)`` 即可。"""
 
@@ -134,53 +114,47 @@ class BackgroundTaskRunner:
         task_id: str | None,
         on_failure_record: Optional[dict],
     ) -> None:
-        last_err: BaseException | None = None
+        from memory_app.task_queue.retry import run_with_retry
+
         sem = self._semaphore
-        if sem is not None:
-            await sem.acquire()
-        try:
-            for attempt in range(1, self._policy.max_attempts + 1):
-                try:
-                    await coro_factory()
-                    self._completed += 1
-                    return
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:  # noqa: BLE001
-                    last_err = e
-                    if attempt >= self._policy.max_attempts:
-                        break
-                    delay = self._policy.delay_for(attempt)
-                    logger.warning(
-                        "background task %s failed (attempt %d/%d, retry in %.2fs): %s",
-                        task_id, attempt, self._policy.max_attempts, delay, e,
-                    )
-                    await asyncio.sleep(delay)
-            await self._dlq_enqueue(task_id, last_err, on_failure_record)
-        finally:
+
+        async def attempt() -> None:
             if sem is not None:
-                sem.release()
+                await sem.acquire()
+            try:
+                await coro_factory()
+            finally:
+                if sem is not None:
+                    sem.release()
+
+        if await run_with_retry(
+            attempt,
+            policy=self._policy,
+            task_id=task_id or "?",
+            on_failure_record=on_failure_record,
+            dlq=self._dlq,
+            log_name="background task",
+            default_dlq_target="background_task",
+        ):
+            self._completed += 1
+        else:
+            self._failed_to_dlq += 1
 
     async def _dlq_enqueue(
         self, task_id: str | None, err: BaseException | None, base: Optional[dict]
     ) -> None:
+        """Deprecated: use task_queue.retry.enqueue_task_dlq."""
+        from memory_app.task_queue.retry import enqueue_task_dlq
+
         self._failed_to_dlq += 1
-        logger.error(
-            "background task %s exhausted retries (→ DLQ): %s", task_id, err
+        await enqueue_task_dlq(
+            self._dlq,
+            task_id=task_id or "",
+            err=err,
+            on_failure_record=base,
+            policy=self._policy,
+            default_target="background_task",
         )
-        if self._dlq is None:
-            return
-        record = DLQRecord(
-            target=(base or {}).get("target", "background_task"),
-            mem_cell_id=task_id or "",
-            operation=(base or {}).get("operation", "execute"),
-            error=str(err) if err else "",
-            retry_count=self._policy.max_attempts,
-        )
-        try:
-            await self._dlq.enqueue(record)
-        except Exception as ee:  # noqa: BLE001
-            logger.error("DLQ enqueue failed (final): %s", ee)
 
     # ────────────────────────────────────────────────────────────────────────
     # 关停

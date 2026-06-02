@@ -48,8 +48,10 @@ api_key_bindings: {}                     # api_key -> {tenant_id, user_id?}，�
 dlq_backend: "memory"                    # memory | mongo | redis
 task_runner_backend: "asyncio"           # asyncio | redis（多 worker 冷路径一致性）
 task_queue_key: "memory:tasks:cold_path"
-task_runner_max_concurrent: 64          # BackgroundTaskRunner / Redis 消费并发上限
-cold_path_max_parallel: 64              # ColdPathService 单进程内并行执行上限
+# ── 并发预算 ──
+background_max_concurrent: 32            # BackgroundTaskRunner / Redis handler 并发上限
+sync_index_max_concurrent: 32             # ingest 回退 per-cell 同步并发
+cold_path_llm_max_concurrent: 8           # 冷路径语义抽取 LLM 并行上限
 
 # ── 可观测 / 限流（Phase 8）──
 metrics_enabled: false

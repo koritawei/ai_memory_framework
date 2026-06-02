@@ -30,7 +30,7 @@ from memory_app.routers import feedback as feedback_router
 from memory_app.routers import health as health_router
 from memory_app.routers import memory as memory_router
 from memory_app.routers import query as query_router
-from memory_app.security.auth import check_api_key
+from memory_app.security.auth import check_api_key, verify_secret
 from memory_app.security.identity import identity_from_gateway_headers, resolve_identity
 from memory_app.settings import get_settings
 
@@ -83,7 +83,13 @@ class _BusinessAuthMiddleware(BaseHTTPMiddleware):
             raise
         identity = resolve_identity(settings, credentials)
         if identity is None and settings.trust_gateway_headers:
-            identity = identity_from_gateway_headers(request.headers)
+            global_key = (
+                credentials is not None
+                and settings.api_key
+                and verify_secret(credentials.credentials, settings.api_key)
+            )
+            if not global_key:
+                identity = identity_from_gateway_headers(request.headers)
         if identity is not None:
             request.state.identity = identity
         return await call_next(request)
@@ -92,6 +98,9 @@ class _BusinessAuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    from memory_app.security.startup import validate_startup_security
+
+    validate_startup_security(settings)
     logger.info(
         "starting %s v%s (debug=%s, config_backend=%s, dlq=%s, tasks=%s)",
         settings.app_name,
@@ -108,6 +117,7 @@ async def lifespan(app: FastAPI):
         logger.warning("prompt manager init failed: %s", e)
 
     reconcile_task: asyncio.Task | None = None
+    reconcile_lock = asyncio.Lock()
     interval = settings.dlq_reconcile_interval_s
     if interval > 0:
 
@@ -116,13 +126,17 @@ async def lifespan(app: FastAPI):
 
             while True:
                 await asyncio.sleep(interval)
-                rec = build_reconciler_from_state(app_state)
-                if rec is None:
+                if reconcile_lock.locked():
+                    logger.debug("skip dlq reconcile: previous run still active")
                     continue
-                try:
-                    await rec.reconcile(limit=settings.dlq_reconcile_batch_size)
-                except Exception as e:  # noqa: BLE001
-                    logger.warning("auto dlq reconcile failed: %s", e)
+                async with reconcile_lock:
+                    rec = build_reconciler_from_state(app_state)
+                    if rec is None:
+                        continue
+                    try:
+                        await rec.reconcile(limit=settings.dlq_reconcile_batch_size)
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning("auto dlq reconcile failed: %s", e)
 
         reconcile_task = asyncio.create_task(_auto_reconcile_loop())
 

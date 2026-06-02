@@ -118,14 +118,12 @@ class ColdPathService:
         runner: "BackgroundTaskRunnerLike | None" = None,
         *,
         on_complete: "Optional[Any]" = None,
-        max_parallel: int = 64,
     ) -> None:
         self._pipeline = pipeline
         self._runner = runner
         # on_complete:可选 callback,签名 ``async (ctx) -> None`` —— 用于 Phase 4 把
         # ctx.episodes / ctx.semantics 落库;Phase 3 无持久化时留空
         self._on_complete = on_complete
-        self._parallel_sem = asyncio.Semaphore(max(1, max_parallel))
 
     def schedule(self, cell: MemCell) -> None:
         """火并忘提交 cell 的冷路径。"""
@@ -136,17 +134,20 @@ class ColdPathService:
         if callable(submit_handler):
             submit_handler(
                 "cold_path",
-                {"mem_cell_id": cell.mem_cell_id},
+                {
+                    "mem_cell_id": cell.mem_cell_id,
+                    "tenant_id": cell.tenant_id,
+                    "user_id": cell.user_id,
+                },
                 task_id=cell.mem_cell_id,
                 on_failure_record={"target": "cold_path", "operation": "execute"},
             )
             return
 
         async def _factory() -> None:
-            async with self._parallel_sem:
-                ctx = await self._pipeline.execute(cell)
-                if self._on_complete is not None:
-                    await self._on_complete(ctx)
+            ctx = await self._pipeline.execute(cell)
+            if self._on_complete is not None:
+                await self._on_complete(ctx)
 
         self._runner.submit(
             _factory,
@@ -160,11 +161,10 @@ class ColdPathService:
 
     async def run_now(self, cell: MemCell):
         """同步执行(便于评测 / e2e)。返回 :class:`ColdPathContext`。"""
-        async with self._parallel_sem:
-            ctx = await self._pipeline.execute(cell)
-            if self._on_complete is not None:
-                await self._on_complete(ctx)
-            return ctx
+        ctx = await self._pipeline.execute(cell)
+        if self._on_complete is not None:
+            await self._on_complete(ctx)
+        return ctx
 
     def attach_stage(self, stage) -> None:  # type: ignore[no-untyped-def]
         """对外开放的"追加 cold-path stage"API。

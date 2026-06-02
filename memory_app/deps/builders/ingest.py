@@ -77,6 +77,7 @@ class IngestServiceBuilder(ServiceBuilder):
             es_repo=es_repo,
             milvus_repo=milvus_repo,
             dlq=state.dlq,
+            sync_index_max_concurrent=state.settings.sync_index_max_concurrent,
         )
         state.mongo_repo = mongo_repo
         state.ingest_service = IngestService(pipeline)

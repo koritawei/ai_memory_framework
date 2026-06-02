@@ -14,18 +14,24 @@ logger = logging.getLogger(__name__)
 
 async def create_task_runner(settings: Settings, clients: Any, dlq: Any) -> Any:
     """按 ``settings.task_runner_backend`` 创建后台任务 runner。"""
-    max_conc = max(1, int(settings.task_runner_max_concurrent))
     if settings.task_runner_backend == "redis":
         if clients.redis_client is None:
-            logger.warning(
-                "task_runner_backend=redis but redis unavailable; fallback asyncio"
+            msg = (
+                "task_runner_backend=redis but redis client unavailable. "
+                "Fix MEMORY_REDIS_URL or set task_runner_backend=asyncio."
             )
-            return BackgroundTaskRunner(dlq=dlq, max_concurrent=max_conc)
+            if settings.debug:
+                logger.warning("%s — fallback to asyncio runner", msg)
+                return BackgroundTaskRunner(
+                    dlq=dlq,
+                    max_concurrent=settings.background_max_concurrent,
+                )
+            raise RuntimeError(msg)
         runner = RedisTaskRunner(
             clients.redis_client,
             settings.task_queue_key,
             dlq=dlq,
-            max_concurrent=max_conc,
+            max_concurrent=settings.background_max_concurrent,
         )
         if settings.task_runner_consumer_enabled:
             await runner.start()
@@ -35,8 +41,11 @@ async def create_task_runner(settings: Settings, clients: Any, dlq: Any) -> Any:
             settings.task_runner_consumer_enabled,
         )
         return runner
-    logger.info("task runner initialized: asyncio")
-    return BackgroundTaskRunner(dlq=dlq, max_concurrent=max_conc)
+    logger.info("task runner initialized: asyncio max_concurrent=%s", settings.background_max_concurrent)
+    return BackgroundTaskRunner(
+        dlq=dlq,
+        max_concurrent=settings.background_max_concurrent,
+    )
 
 
 __all__ = ["create_task_runner"]
