@@ -1,4 +1,4 @@
-"""SemanticExtractor SPI —— 语义记忆联想抽取。
+"""SemanticExtractor SPI —— 语义记忆联想抽取（设计文档 §5.1.3.7）。
 
 从 :class:`EpisodicMemory` 联想出可能的稳定语义知识。
 默认实现「10 联想策略」—— LLM 基于情景内容产出恰好 10 条

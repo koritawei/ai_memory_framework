@@ -11,13 +11,13 @@
 
 ## 阅读顺序(沿"写 → 读 → 反馈 → 巩固"业务时间线)
 
-| 顺序 | 文件 | 覆盖能力 | 关键概念 |
+| 顺序 | 文件 | 覆盖 Phase | 关键概念 |
 | --- | --- | --- | --- |
-| 1 | `test_demo_ingest_hot_path.py` | 写入热路径 | RawData → SBD → MemCell → Mongo + ES + Milvus + DLQ |
-| 2 | `test_demo_cold_path.py` | 冷路径 + 图索引 | Episode 抽取 → Semantic 抽取 → 聚类 → EntityIndex |
-| 3 | `test_demo_retrieval_pipeline.py` | 检索 | RecallStage → FuseStage(RRF)→ SignalBoost → Filter → Rerank(MMR) |
-| 4 | `test_demo_feedback_lifecycle.py` | 反馈与生命周期 | POSITIVE / NEGATIVE / EXPLICIT_CONFIRM 反馈 → atomic strength 更新 |
-| 5 | `test_demo_sleep_consolidation.py` | 离线巩固 | MemScene → LLM 候选 → Consolidator 决策(ADD/UPDATE/SUPERSEDE/NOOP) |
+| 1 | `test_demo_ingest_hot_path.py` | Phase 2 | RawData → SBD → MemCell → Mongo + ES + Milvus + DLQ |
+| 2 | `test_demo_cold_path.py` | Phase 3 + 7 | Episode 抽取 → Semantic 抽取 → 聚类 → EntityIndex |
+| 3 | `test_demo_retrieval_pipeline.py` | Phase 4 | RecallStage → FuseStage(RRF)→ SignalBoost → Filter → Rerank(MMR) |
+| 4 | `test_demo_feedback_lifecycle.py` | Phase 5 | POSITIVE / NEGATIVE / EXPLICIT_CONFIRM 反馈 → atomic strength 更新 |
+| 5 | `test_demo_sleep_consolidation.py` | Phase 6 | MemScene → LLM 候选 → Consolidator 决策(ADD/UPDATE/SUPERSEDE/NOOP) |
 
 ## 运行方式
 
@@ -37,9 +37,9 @@
 1. **线性、可读**:demo 是"脚本"不是"参数化矩阵"。每条 demo 顺序就是阅读顺序。
 2. **重注释**:每段代码上方说明"现在系统里在做什么、为什么这么做"。
 3. **强断言**:不止断言"返回值正确",还断言每个 stage 对外部 fake 的副作用 ——
-一个 stage 偷偷退化也能被立刻发现。
+   一个 stage 偷偷退化也能被立刻发现。
 4. **真实管线 + 虚假叶子**:Pipeline / Service / Consolidator 等业务代码全部走真实实现;
-只把"叶子"(Mongo / ES / Milvus / LLM / Embedding)替换成 fake。
+   只把"叶子"(Mongo / ES / Milvus / LLM / Embedding)替换成 fake。
 5. **fixture 隔离**:demo 的 fake 都在 `tests/demo/conftest.py`,不污染主测试套件的命名空间。
 
 ## 与其他测试目录的关系

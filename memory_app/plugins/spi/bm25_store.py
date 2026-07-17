@@ -1,4 +1,4 @@
-"""BM25Store SPI —— BM25 关键词检索后端。
+"""BM25Store SPI —— BM25 关键词检索后端（设计文档 §5.2 / §6.1）。
 
 默认实现 ``es_store``（Elasticsearch）；可换 ``opensearch_store`` /
 ``sqlite_fts5_store``。

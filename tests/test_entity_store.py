@@ -1,4 +1,4 @@
-"""EntityStore 测试。"""
+"""EntityStore 测试(Step 7.1)。"""
 
 from __future__ import annotations
 

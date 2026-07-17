@@ -1,7 +1,7 @@
-"""``noop_sbd`` —— 脚手架/1 占位 SBD（继承 :class:`BoundaryDetector` SPI）。
+"""``noop_sbd`` —— Phase 0/1 占位 SBD（继承 :class:`BoundaryDetector` SPI）。
 
-当前版本起本插件已切到正式 SPI 抽象，方法签名与未来真实 ``rule_sbd`` /
-``hybrid_sbd``（写入热路径 落地）兼容。继续承担"打通通路 + 默认安全行为"职责：
+Phase 1 起本插件已切到正式 SPI 抽象，方法签名与未来真实 ``rule_sbd`` /
+``hybrid_sbd``（Phase 2 落地）兼容。继续承担"打通通路 + 默认安全行为"职责：
 :meth:`detect` 永远返回 ``should_wait=True`` —— 不切边界，让上游继续累积。
 """
 
@@ -20,13 +20,13 @@ from memory_app.plugins.spi.boundary_detector import (
 
 @register
 class NoopSBD(BoundaryDetector):
-    """脚手架/1 stub —— 永不切边界。"""
+    """Phase 0/1 stub —— 永不切边界。"""
 
     meta = PluginMeta(
         name="noop_sbd",
         category="memory.generation.boundary_detector",
         version="0.1.0",
-        description="脚手架/1 stub —— 永不切边界",
+        description="Phase 0/1 stub —— 永不切边界",
         # JSON Schema：与未来 hybrid_sbd 的 schema 子集兼容，
         # 便于配置切换后无需修改 default.yaml 中的参数块
         config_schema={
@@ -56,7 +56,7 @@ class NoopSBD(BoundaryDetector):
         new: list[RawData],
         ctx: BoundaryContext,
     ) -> BoundaryDetectionResult:
-        """脚手架/1 stub：永远要求 caller 等待更多消息。
+        """Phase 0/1 stub：永远要求 caller 等待更多消息。
 
         遵守 SPI 约定：history 为空时返回 ``should_end=False, should_wait=False,
         reasoning="cold_start"``，让 SBD 调用方据此判定是否首条消息。

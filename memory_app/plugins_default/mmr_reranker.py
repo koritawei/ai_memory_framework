@@ -1,4 +1,4 @@
-"""``mmr`` —— 检索 MMR 重排插件。
+"""``mmr`` —— Phase 4 Step 4.4 MMR 重排插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class MMRRerankerPlugin(Reranker):
-    """MMR 重排(检索 默认)。"""
+    """MMR 重排(Phase 4 默认)。"""
 
     meta = PluginMeta(
         name="mmr",

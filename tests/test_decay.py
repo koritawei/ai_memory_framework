@@ -1,4 +1,4 @@
-"""DecayManager + GreedyCapacityOptimizer 测试。"""
+"""DecayManager + GreedyCapacityOptimizer 测试(Step 6.3)。"""
 
 from __future__ import annotations
 

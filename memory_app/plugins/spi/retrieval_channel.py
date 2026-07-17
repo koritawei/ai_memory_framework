@@ -1,10 +1,10 @@
-"""RetrievalChannel SPI —— 单路召回通道。
+"""RetrievalChannel SPI —— 单路召回通道（设计文档 §6.0–§6.5）。
 
 四个默认实现（按优先级）：
 - ``vector_milvus``  向量语义（含 Fisher-Rao 模式）
 - ``bm25_es``        BM25 关键词
-- ``entity_boost``   Entity Store 反向索引（冷路径）
-- ``graph_traversal`` 图遍历（冷路径）
+- ``entity_boost``   Entity Store 反向索引（Phase 3）
+- ``graph_traversal`` 图遍历（Phase 3）
 """
 
 from __future__ import annotations

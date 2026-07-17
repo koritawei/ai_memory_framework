@@ -1,4 +1,4 @@
-"""Demo: 写入冷路径（``ColdPathPipeline``）。
+"""Demo: Phase 3 写入冷路径(``ColdPathPipeline``)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 本 demo 走读
@@ -21,7 +21,7 @@
        ├── Stage 3: ClusterStage (IncrementalCentroidClusterer)
        │       → ctx.cluster_id, ctx.cluster_meta
        │
-       └── Stage 4: EntityIndexStage（图与实体索引）
+       └── Stage 4: EntityIndexStage (Phase 7)
                → EntityStore.upsert_entities + MemoryGraph.add_memory_node
 
 本 demo 用 fake 抽取器 / fake 聚类器,因为 demo 关注的是"管线编排"——
@@ -156,7 +156,7 @@ async def test_demo_cold_path_runs_all_four_stages(
         semantic_extractor=sem_ext,
         clusterer=clusterer,
     )
-    # EntityIndexStage 不在 ColdPathPipeline 的默认 stages 里(图与实体 才接入)。
+    # EntityIndexStage 不在 ColdPathPipeline 的默认 stages 里(Phase 7 才接入)。
     # 装配代码通过 ``extra_stages`` 把它推入。这里 demo 直接 push 到 pipeline。
     entity_stage = EntityIndexStage(
         entity_store=fake_entity_store,
@@ -269,8 +269,8 @@ async def test_demo_cold_path_propagates_extractor_exception():
 # ════════════════════════════════════════════════════════════════════════════
 @pytest.mark.asyncio
 async def test_demo_entity_index_soft_fails_when_store_raises(fake_memory_graph):
-    """演示 的"软失败"语义:图与实体 实体索引坏了不该让
-    冷路径 已抽取的 episodes/semantics 白白丢掉。"""
+    """演示设计文档 §5.4 的"软失败"语义:Phase 7 实体索引坏了不该让
+    Phase 3 已抽取的 episodes/semantics 白白丢掉。"""
     class _BoomStore:
         async def upsert_entities(self, *a, **kw):
             raise RuntimeError("EntityStore down")

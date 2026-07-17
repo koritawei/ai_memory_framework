@@ -48,7 +48,10 @@ def _identity_from_jwt(settings: Settings, token: str) -> ResolvedIdentity | Non
         payload = jwt.decode(
             token,
             settings.jwt_secret,
-            algorithms=[settings.jwt_algorithm],
+            algorithms=[settings.jwt_algorithm]
+            if settings.jwt_algorithm in ("HS256", "HS384", "HS512", "RS256")
+            else ["HS256"],
+            options={"require": ["exp"]},
         )
     except jwt.PyJWTError as e:
         logger.debug("jwt decode failed: %s", e)

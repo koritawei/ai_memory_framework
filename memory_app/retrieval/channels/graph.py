@@ -1,4 +1,4 @@
-"""GraphChannel —— 图遍历召回通道。
+"""GraphChannel —— 图遍历召回通道(设计文档 §6.5 / §8)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 流程
@@ -15,21 +15,25 @@
 - 2 跳命中 → ``0.6``(衰减)
 - N 跳命中 → ``0.6 ** (hop-1)``
 
-具体跳数由 store 的 traverse 不暴露明细;图与实体 简化:统一给 1.0,管理面 起
+具体跳数由 store 的 traverse 不暴露明细;Phase 7 简化:统一给 1.0,Phase 8 起
 通过 GraphStore 扩展 traverse 返回 ``hop`` 元信息后再细化。
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
+from memory_app.concurrency import gather_with_limit
 from memory_app.graph_index import MemoryGraph, entity_node_id
 from memory_app.internal_models import MemoryType, RankedMemory
 from memory_app.plugins.base import PluginError, PluginErrorCategory
 from memory_app.retrieval.channels.base import BaseRetrievalChannel
 from memory_app.retrieval.channels.entity import _fallback_tokenize
+from memory_app.retrieval.channels.mongo_fetch import fetch_mem_cells_by_ids
+
+#: 单 query 内并发图遍历上限（防止实体过多时无界 fan-out）
+_DEFAULT_TRAVERSE_MAX_CONCURRENT = 16
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +50,13 @@ class GraphChannel(BaseRetrievalChannel):
         entity_extractor: Any | None = None,
         *,
         max_depth: int = 2,
+        traverse_max_concurrent: int = _DEFAULT_TRAVERSE_MAX_CONCURRENT,
     ) -> None:
         self.memory_graph = memory_graph
         self.mongo_repo = mongo_repo
         self.entity_extractor = entity_extractor
         self.max_depth = max(0, min(int(max_depth), 3))
+        self.traverse_max_concurrent = max(1, int(traverse_max_concurrent))
 
     # ────────────────────────────────────────────────────────────────────────
     # 依赖
@@ -90,11 +96,12 @@ class GraphChannel(BaseRetrievalChannel):
         # 并发 BFS:每个实体一次 traverse,gather 把 N×RTT 压成 1×RTT。
         # 单条失败不影响整体(return_exceptions=True 捕获,后续按 ent 顺序合并)。
         seeds = [(ent, entity_node_id(tenant_id, user_id, ent)) for ent in entities]
-        traverse_results = await asyncio.gather(
-            *[
+        traverse_results = await gather_with_limit(
+            [
                 self.memory_graph.get_neighbors(user_id, seed, max_depth=self.max_depth)
                 for _, seed in seeds
             ],
+            self.traverse_max_concurrent,
             return_exceptions=True,
         )
         all_mem_ids: list[str] = []
@@ -115,24 +122,15 @@ class GraphChannel(BaseRetrievalChannel):
         # Mongo 中已 archive/删除"时返回不足 top_k 条。
         over_fetch = max(top_k * 2, top_k)
         candidate_ids = all_mem_ids[:over_fetch]
-        cells = await self._fetch_cells(candidate_ids)
-        # 图与实体 简化:统一给 1.0;RRF 自然吸收尺度
+        cells = await fetch_mem_cells_by_ids(
+            self.mongo_repo,
+            candidate_ids,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+        # Phase 7 简化:统一给 1.0;RRF 自然吸收尺度
         out: list[tuple[float, Any]] = [(1.0, c) for c in cells[:top_k]]
         return {"hits": out, "entities": list(entities)}
-
-    async def _fetch_cells(self, ids: list[str]) -> list:
-        """优先批量取(``get_by_ids``);老版 repo 无该方法时退化到 gather。"""
-        if not ids:
-            return []
-        batch_fn = getattr(self.mongo_repo, "get_by_ids", None)
-        if callable(batch_fn):
-            return await batch_fn(ids)
-        # asyncio 已在模块顶部 import,这里直接用
-        results = await asyncio.gather(
-            *[self.mongo_repo.get_by_id(m) for m in ids],
-            return_exceptions=False,
-        )
-        return [c for c in results if c is not None]
 
     # ────────────────────────────────────────────────────────────────────────
     # 解析

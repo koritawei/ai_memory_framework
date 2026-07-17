@@ -1,4 +1,4 @@
-"""ClusterManager + IncrementalCentroidClusterer 测试。"""
+"""ClusterManager + IncrementalCentroidClusterer 测试(Step 3.4)。"""
 
 from __future__ import annotations
 

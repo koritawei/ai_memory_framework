@@ -1,4 +1,4 @@
-"""MemoryGraph —— 记忆图核心算法。
+"""MemoryGraph —— 记忆图核心算法(设计文档 §8)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 节点 / 边模型
@@ -6,13 +6,13 @@
 节点类型:
 - ``memory``     记忆节点(对应 MemCell / EpisodicMemory / SemanticMemory)
 - ``entity``     实体节点(``id = entity:<tenant>:<user>:<entity>``)
-- ``community``  簇 / 主题节点（REM 巩固阶段生成）
-- ``user``       用户节点（预留，当前暂不连）
+- ``community``  簇 / 主题节点(Phase 7+ 由 REM 巩固生成)
+- ``user``       用户节点(预留;Phase 7 暂不连)
 
 边类型(对齐 ``GraphStore`` SPI):
-- ``MENTIONS``    memory 指向 entity（当前主要写入的边类型）
+- ``MENTIONS``    memory 指向 entity(本 Phase 主要写入)
 - ``RELATED_TO``  entity ↔ entity 共现
-- ``SUPPORTS`` / ``CONFLICTS`` / ``UPDATES``  巩固阶段写入
+- ``SUPPORTS`` / ``CONFLICTS`` / ``UPDATES``  Phase 8+ 巩固阶段写
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -83,7 +83,7 @@ def edge_id(source: str, relation: str, target: str) -> str:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 内存图(供测试 / 评测 / 图与实体 默认)
+# 内存图(供测试 / 评测 / Phase 7 默认)
 # ════════════════════════════════════════════════════════════════════════════
 class InMemoryGraph:
     """按 ``user_id`` 分片 + LRU 容量上限的内存图。

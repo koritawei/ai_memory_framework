@@ -1,4 +1,4 @@
-"""BaseRetrievalChannel —— 单路召回模板方法。
+"""BaseRetrievalChannel —— 单路召回模板方法(设计文档 §6.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 模板方法骨架
@@ -6,7 +6,7 @@
 ::
 
     search(tenant_id, user_id, query, top_k)
-        ├── _check_dependencies   子类实现:依赖客户端是否注入
+        ├── _check_dependencies()   子类实现:依赖客户端是否注入
         ├── _execute_search(...)    子类实现:调底层 ES/Milvus
         ├── _parse_hits(raw)        子类实现:把底层响应转 RankedMemory 列表
         └── _sort_hits(hits)        基类实现:按 score 降序 + 填 rank

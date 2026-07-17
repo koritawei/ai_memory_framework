@@ -1,4 +1,4 @@
-"""POST /v1/memory/feedback 端点测试。"""
+"""POST /v1/memory/feedback 端点测试(Step 5.1)。"""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ class _FakeMongoRepo:
     async def get_by_id(self, mid):
         return self.store.get(mid)
 
-    async def update(self, mid, updates):
+    async def update(self, mid, updates, **_scope):
         if mid not in self.store:
             return False
         self.updates.append((mid, dict(updates)))
@@ -157,6 +157,22 @@ class TestFeedbackEndpoint:
         body = {
             "tenant_id": "t1", "user_id": "u1",
             "mem_cell_id": "nonexistent-id",
+            "feedback_type": "positive",
+        }
+        r = client.post("/v1/memory/feedback", json=body)
+        assert r.status_code == 404
+
+    def test_tenant_mismatch_returns_404(self, fixtures):
+        client, repo = fixtures
+        cell = MemCell(
+            tenant_id="t1", user_id="u1", session_id="s1",
+            text="test", strength=1.0,
+        )
+        repo.store[cell.mem_cell_id] = cell
+        body = {
+            "tenant_id": "other_tenant",
+            "user_id": "u1",
+            "mem_cell_id": cell.mem_cell_id,
             "feedback_type": "positive",
         }
         r = client.post("/v1/memory/feedback", json=body)

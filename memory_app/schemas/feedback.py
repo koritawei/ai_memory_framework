@@ -1,7 +1,7 @@
-"""``POST /v1/memory/feedback`` 反馈契约。
+"""``POST /v1/memory/feedback`` 反馈契约（设计文档 §7.5）。
 
 ═══════════════════════════════════════════════════════════════════════════════
-反馈类型与 signal_value 对照
+反馈类型与 signal_value 对照（设计文档 §7.5）
 ═══════════════════════════════════════════════════════════════════════════════
 | feedback_type      | signal_value | 效果           |
 | ------------------ | ------------ | -------------- |
@@ -41,7 +41,7 @@ class FeedbackRequest(BaseModel):
     - ``mem_cell_id`` 指向写入侧产物（MemCell）
     - ``memory_id``   指向检索侧产物（EpisodicMemory / SemanticMemory）
 
-    反馈与生命周期 落地时由 :class:`memory_app.plugins.spi.reinforcer.Reinforcer`
+    Phase 5 落地时由 :class:`memory_app.plugins.spi.reinforcer.Reinforcer`
     SPI 实际处理。
     """
 

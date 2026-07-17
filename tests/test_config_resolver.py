@@ -1,4 +1,4 @@
-""" 验收：五级覆盖与灰度匹配。"""
+"""Step 0.6 验收：五级覆盖与灰度匹配。"""
 
 from __future__ import annotations
 

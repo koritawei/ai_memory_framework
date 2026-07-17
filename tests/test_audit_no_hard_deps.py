@@ -1,11 +1,11 @@
-"""scripts/audit_no_hard_deps.py 单测(管理面)。
+"""scripts/audit_no_hard_deps.py 单测(Phase 8 Step 8.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 覆盖
 ═══════════════════════════════════════════════════════════════════════════════
 - 当前业务平面无硬依赖,审计通过
 - 故意构造硬依赖文件 → 审计失败并返回非空违规列表
-- main 退出码语义:无违规 → 0,有违规 → 1
+- main() 退出码语义:无违规 → 0,有违规 → 1
 - 仅扫描 .py;非 Python 文件被忽略
 - ALLOW_DIRS 之外的 ``import memory_app.plugins_default.X`` 与
   ``from memory_app.plugins_default.X import Y`` 都应被识别
@@ -95,7 +95,7 @@ class TestDetectsViolations:
     def test_main_returns_one_with_violation(
         self, tmp_path, monkeypatch, capsys
     ):
-        # 把脚本看成的 repo_root 替换到 tmp_path,验证 main 返回 1
+        # 把脚本看成的 repo_root 替换到 tmp_path,验证 main() 返回 1
         from scripts import audit_no_hard_deps
 
         f = self._write_offender(
@@ -156,7 +156,7 @@ class TestBoundaries:
         assert FORBIDDEN_PREFIX == "memory_app.plugins_default"
 
     def test_business_targets_cover_design_doc_minimum(self):
-        #
+        # 设计文档明确点名:services / retrieval / routers / api 必须扫描
         for required in (
             "memory_app/services.py",
             "memory_app/retrieval/",

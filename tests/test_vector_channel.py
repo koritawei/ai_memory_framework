@@ -1,4 +1,4 @@
-"""VectorChannel + vector_milvus 插件测试。"""
+"""VectorChannel + vector_milvus 插件测试(Step 4.2)。"""
 
 from __future__ import annotations
 

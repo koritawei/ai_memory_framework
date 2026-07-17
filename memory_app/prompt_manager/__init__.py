@@ -1,4 +1,4 @@
-"""LLM Prompt 运行时。
+"""LLM Prompt 运行时(设计文档 §2.8.4.1 / Phase 0 Step 0.7)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 出口
@@ -10,7 +10,7 @@
 - :data:`BUILTIN_PROMPTS`            内置种子(运维删除 default.yaml 后的兜底)
 
 业务侧 import 仅用 :mod:`memory_app.prompt_runtime` 中的 ``get_prompt_manager``,
-不直接 import 本子包以避免在 冷路径 提取器内部硬连接具体类。
+不直接 import 本子包以避免在 Phase 3 提取器内部硬连接具体类。
 """
 
 from .builtins import BUILTIN_PROMPTS

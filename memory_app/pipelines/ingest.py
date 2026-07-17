@@ -1,22 +1,22 @@
-"""IngestPipeline —— 写入热路径管线。
+"""IngestPipeline —— 写入热路径管线(设计文档 §2.7.6 / §5.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
-阶段顺序(写入热路径 完整版)
+阶段顺序(Phase 2 完整版)
 ═══════════════════════════════════════════════════════════════════════════════
 
 ::
 
-    SegmentStage          (SBD 切边界,)
+    SegmentStage          (SBD 切边界,Step 2.1)
         ↓
-    PersistMemCellStage   (MongoDB 落 SOT,)
+    PersistMemCellStage   (MongoDB 落 SOT,Step 2.2)
         ↓
-    SyncIndexStage        (ES + Milvus 同步,失败入 DLQ;)
+    SyncIndexStage        (ES + Milvus 同步,失败入 DLQ;Step 2.3)
 
-新增阶段(冷路径触发 / 准入门 / 鉴权)只需在 ``stages`` 列表中插入,
+新增阶段(冷路径触发 / 准入门 / 鉴权)只需在 ``stages()`` 列表中插入,
 不影响 :class:`memory_app.services.IngestService` 与路由层。
 
 ═══════════════════════════════════════════════════════════════════════════════
-SyncIndexStage 失败语义( + )
+SyncIndexStage 失败语义(§5.2 + §5.4)
 ═══════════════════════════════════════════════════════════════════════════════
 - ES 失败 → 记入 DLQ(target=es),**不**抛异常,主路径继续
 - Milvus 失败 → 记入 DLQ(target=milvus),**不**抛异常
@@ -99,7 +99,7 @@ class IngestPipelineContext:
     #: PersistMemCellStage 输出:落库后的 MemCell 列表
     cells: list[MemCell] = field(default_factory=list)
 
-    #: 同步索引阶段结果汇报
+    #: 同步索引阶段(Step 2.3)结果汇报
     es_failures: list[str] = field(default_factory=list)
     milvus_failures: list[str] = field(default_factory=list)
 
@@ -147,12 +147,14 @@ class PersistMemCellStage(PipelineStage[IngestPipelineContext]):
         if cells:
             insert_many = getattr(self._repo, "insert_many", None)
             if callable(insert_many):
-                await insert_many(cells)
+                inserted_ids = await insert_many(cells)
+                id_set = set(inserted_ids)
+                ctx.cells.extend(c for c in cells if c.mem_cell_id in id_set)
             else:
                 # 兼容仅实现 insert 的 fake repo / 第三方实现
                 for c in cells:
                     await self._repo.insert(c)
-        ctx.cells.extend(cells)
+                    ctx.cells.append(c)
         ctx.metrics["persisted_count"] = len(ctx.cells)
         return ctx
 
@@ -160,8 +162,8 @@ class PersistMemCellStage(PipelineStage[IngestPipelineContext]):
     def _build_cell(segment: list[RawData]) -> MemCell:
         """从 segment 构造 MemCell;text 拼接所有 turns。
 
-        其它字段(``embedding`` / ``summary`` / ``episode``)由 冷路径 冷路径填充,
-        写入热路径 仅落最小集合(text + 溯源 ids + 时间戳)。
+        其它字段(``embedding`` / ``summary`` / ``episode``)由 Phase 3 冷路径填充,
+        Phase 2 仅落最小集合(text + 溯源 ids + 时间戳)。
         """
         first = segment[0]
         text = "\n".join(r.content for r in segment)
@@ -202,14 +204,6 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
         self._dlq = dlq
         self._sync_max_concurrent = max(1, int(sync_max_concurrent))
 
-    @property
-    def es_repo(self) -> _ESRepoProto | None:
-        return self._es_repo
-
-    @property
-    def milvus_repo(self) -> _MilvusRepoProto | None:
-        return self._milvus_repo
-
     async def run(self, ctx: IngestPipelineContext) -> IngestPipelineContext:
         # 性能优先策略:
         # 1. ES 支持 bulk_index → 一次 Bulk API
@@ -246,26 +240,12 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                 err_msg = str(e)
                 for cell in ctx.cells:
                     ctx.es_failures.append(cell.mem_cell_id)
-                    await self._enqueue_dlq(
-                        "es",
-                        cell.mem_cell_id,
-                        err_msg,
-                        tenant_id=cell.tenant_id,
-                        user_id=cell.user_id,
-                    )
+                    await self._enqueue_dlq("es", cell.mem_cell_id, err_msg)
                 return
             # Bulk 部分失败:把失败 id + 原始错误信息落 DLQ
-            cell_by_id = {c.mem_cell_id: c for c in ctx.cells}
             for mid, err_msg in (failures or {}).items():
                 ctx.es_failures.append(mid)
-                cell = cell_by_id.get(mid)
-                await self._enqueue_dlq(
-                    "es",
-                    mid,
-                    err_msg,
-                    tenant_id=cell.tenant_id if cell else None,
-                    user_id=cell.user_id if cell else None,
-                )
+                await self._enqueue_dlq("es", mid, err_msg)
             return
         # 回退:per-cell 有界并发
         from memory_app.concurrency import gather_with_limit
@@ -281,7 +261,7 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
     async def _sync_milvus_batch(self, ctx: IngestPipelineContext) -> None:
         if self._milvus_repo is None:
             return
-        # 过滤掉无 embedding 的 cell(写入热路径 多数 cell 在 cold path 才补 embedding)
+        # 过滤掉无 embedding 的 cell(Phase 2 多数 cell 在 cold path 才补 embedding)
         rows = [
             (
                 c.mem_cell_id,
@@ -304,29 +284,13 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                     len(rows), e,
                 )
                 err_msg = str(e)
-                cell_by_id = {c.mem_cell_id: c for c in ctx.cells}
                 for mid, _, _ in rows:
                     ctx.milvus_failures.append(mid)
-                    cell = cell_by_id.get(mid)
-                    await self._enqueue_dlq(
-                        "milvus",
-                        mid,
-                        err_msg,
-                        tenant_id=cell.tenant_id if cell else None,
-                        user_id=cell.user_id if cell else None,
-                    )
+                    await self._enqueue_dlq("milvus", mid, err_msg)
                 return
-            cell_by_id = {c.mem_cell_id: c for c in ctx.cells}
             for mid, err_msg in (failures or {}).items():
                 ctx.milvus_failures.append(mid)
-                cell = cell_by_id.get(mid)
-                await self._enqueue_dlq(
-                    "milvus",
-                    mid,
-                    err_msg,
-                    tenant_id=cell.tenant_id if cell else None,
-                    user_id=cell.user_id if cell else None,
-                )
+                await self._enqueue_dlq("milvus", mid, err_msg)
             return
         # 回退:per-cell 有界并发
         from memory_app.concurrency import gather_with_limit
@@ -347,19 +311,13 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                 "ES sync failed for %s (degraded → DLQ): %s", cell.mem_cell_id, e
             )
             ctx.es_failures.append(cell.mem_cell_id)
-            await self._enqueue_dlq(
-                "es",
-                cell.mem_cell_id,
-                str(e),
-                tenant_id=cell.tenant_id,
-                user_id=cell.user_id,
-            )
+            await self._enqueue_dlq("es", cell.mem_cell_id, str(e))
 
     async def _sync_milvus(self, cell: MemCell, ctx: IngestPipelineContext) -> None:
         if self._milvus_repo is None:
             return
         if not cell.embedding:
-            # 写入热路径 冷路径未生成 embedding 时跳过 —— 这是预期路径,不入 DLQ
+            # Phase 2 冷路径未生成 embedding 时跳过 —— 这是预期路径,不入 DLQ
             return
         try:
             await self._milvus_repo.insert(
@@ -376,28 +334,11 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                 cell.mem_cell_id, e,
             )
             ctx.milvus_failures.append(cell.mem_cell_id)
-            await self._enqueue_dlq(
-                "milvus",
-                cell.mem_cell_id,
-                str(e),
-                tenant_id=cell.tenant_id,
-                user_id=cell.user_id,
-            )
+            await self._enqueue_dlq("milvus", cell.mem_cell_id, str(e))
 
-    async def _enqueue_dlq(
-        self,
-        target: str,
-        mem_cell_id: str,
-        err: str,
-        *,
-        tenant_id: str | None = None,
-        user_id: str | None = None,
-    ) -> None:
+    async def _enqueue_dlq(self, target: str, mem_cell_id: str, err: str) -> None:
         if self._dlq is None:
             return
-        extra: dict[str, str] | None = None
-        if tenant_id and user_id:
-            extra = {"tenant_id": tenant_id, "user_id": user_id}
         try:
             await self._dlq.enqueue(
                 DLQRecord(
@@ -405,7 +346,6 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
                     mem_cell_id=mem_cell_id,
                     operation="index",
                     error=err,
-                    extra=extra,
                 )
             )
         except Exception as e:  # noqa: BLE001
@@ -471,12 +411,6 @@ class IngestPipeline(
 
     async def finalize(self, ctx: IngestPipelineContext) -> list[str]:
         return [c.mem_cell_id for c in ctx.cells]
-
-    def sync_index_repos(
-        self,
-    ) -> tuple[_ESRepoProto | None, _MilvusRepoProto | None]:
-        """返回 SyncIndexStage 绑定的 ES / Milvus 仓储（供 Reconciler 复用）。"""
-        return self._sync_stage.es_repo, self._sync_stage.milvus_repo
 
 
 __all__ = [

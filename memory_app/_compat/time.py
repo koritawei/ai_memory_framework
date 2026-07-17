@@ -1,9 +1,9 @@
-"""tz-aware ``utcnow`` —— 替代 Python 3.12+ 弃用的 ``datetime.utcnow``。
+"""tz-aware ``utcnow()`` —— 替代 Python 3.12+ 弃用的 ``datetime.utcnow()``。
 
 ═══════════════════════════════════════════════════════════════════════════════
 背景
 ═══════════════════════════════════════════════════════════════════════════════
-``datetime.utcnow`` 自 Python 3.12 起 DeprecationWarning,因其返回**naive**
+``datetime.utcnow()`` 自 Python 3.12 起 DeprecationWarning,因其返回**naive**
 datetime,与 ``datetime.now(timezone.utc)`` 返回的 tz-aware 实例混用会引发
 微妙 bug(``replace(tzinfo=...)`` 后又被去掉等)。
 

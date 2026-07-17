@@ -1,4 +1,4 @@
-"""VectorStore SPI —— 向量索引。
+"""VectorStore SPI —— 向量索引（设计文档 §5.2）。
 
 默认实现 ``milvus_store``；可换 ``qdrant_store`` / ``pgvector_store``。
 """
@@ -66,7 +66,7 @@ class VectorStore(Plugin):
 
     @abstractmethod
     async def flush(self, collection: str) -> None:
-        """强制刷盘，确保新写入立即可被检索。"""
+        """强制刷盘，确保新写入立即可被检索（设计文档 §12.1 strong consistency）。"""
 
 
 __all__ = ["VectorStore", "VectorItem", "VectorHit"]

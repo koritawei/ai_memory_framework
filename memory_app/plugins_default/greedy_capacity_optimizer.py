@@ -1,4 +1,4 @@
-"""``greedy_capacity_optimizer`` —— 离线巩固 默认 CapacityOptimizer。
+"""``greedy_capacity_optimizer`` —— Phase 6 Step 6.3 默认 CapacityOptimizer。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -54,7 +54,7 @@ def _state_rank(state: Any) -> int:
 # ════════════════════════════════════════════════════════════════════════════
 @register
 class GreedyCapacityOptimizer(CapacityOptimizer):
-    """贪心 + 安全边际容量优化(离线巩固 默认)。"""
+    """贪心 + 安全边际容量优化(Phase 6 默认)。"""
 
     meta = PluginMeta(
         name="greedy",

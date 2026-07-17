@@ -70,13 +70,24 @@ class FakeMongoRepo:
     async def get_by_id(self, mem_cell_id: str) -> MemCell | None:
         return self.store.get(mem_cell_id)
 
-    async def get_by_ids(self, mem_cell_ids: list[str]) -> list[MemCell]:
+    async def get_by_ids(
+        self,
+        mem_cell_ids: list[str],
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[MemCell]:
         """与真实 repo 同语义:保留入参顺序,不存在则丢弃。"""
         out: list[MemCell] = []
         for mid in mem_cell_ids:
             cell = self.store.get(mid)
-            if cell is not None:
-                out.append(cell)
+            if cell is None:
+                continue
+            if tenant_id is not None and cell.tenant_id != tenant_id:
+                continue
+            if user_id is not None and cell.user_id != user_id:
+                continue
+            out.append(cell)
         return out
 
     async def find_all(
@@ -111,7 +122,7 @@ class FakeMongoRepo:
         )
 
     # ── 更新 ──────────────────────────────────────────────────────────────
-    async def update(self, mem_cell_id: str, updates: dict[str, Any]) -> bool:
+    async def update(self, mem_cell_id: str, updates: dict[str, Any], **_scope) -> bool:
         cell = self.store.get(mem_cell_id)
         if cell is None:
             return False
@@ -152,6 +163,7 @@ class FakeMongoRepo:
         *,
         strength_delta: float,
         s_max: float,
+        **_scope,
     ) -> int:
         """与真实 repo 的 aggregation pipeline 语义对齐。"""
         self.bulk_increment_calls.append(list(mem_cell_ids))
@@ -174,8 +186,7 @@ class FakeMongoRepo:
         delta: float,
         s_max: float,
         increment_access: bool,
-        tenant_id: str | None = None,
-        user_id: str | None = None,
+        **_scope,
     ) -> dict | None:
         """**关键 fake**:模拟服务端 ``find_one_and_update`` + aggregation $set。
 
@@ -187,10 +198,6 @@ class FakeMongoRepo:
         self.atomic_calls.append((mem_cell_id, delta, s_max, increment_access))
         cell = self.store.get(mem_cell_id)
         if cell is None:
-            return None
-        if tenant_id is not None and cell.tenant_id != tenant_id:
-            return None
-        if user_id is not None and cell.user_id != user_id:
             return None
         # 真实 Mongo 在 $set 阶段一气呵成;Python 端按序执行模拟原子性
         cell.strength = min(s_max, float(cell.strength) + float(delta))

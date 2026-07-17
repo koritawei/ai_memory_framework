@@ -1,4 +1,4 @@
-"""VectorChannel —— Milvus 向量语义检索通道。
+"""VectorChannel —— Milvus 向量语义检索通道(设计文档 §6.1.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 流程
@@ -35,10 +35,10 @@ from typing import Any
 from memory_app.internal_models import MemoryType, RankedMemory
 from memory_app.plugins.base import PluginError, PluginErrorCategory
 from memory_app.retrieval.channels.base import BaseRetrievalChannel
-from memory_app.security.sanitize import escape_milvus_expr_string
 
 logger = logging.getLogger(__name__)
 
+# 用户 filters 仅允许白名单字段，防止 Milvus expr 键名注入
 _MILVUS_FILTER_FIELD_ALLOWLIST = frozenset({"memory_type", "state"})
 
 
@@ -220,22 +220,18 @@ def _looks_blocking(collection: Any) -> bool:
 
 def _milvus_eq(field: str, value: str) -> str:
     """构造 ``field == "value"`` 表达式片段（字段与值均校验）。"""
+    from memory_app.security.sanitize import escape_milvus_expr_string
+
     safe_field = escape_milvus_expr_string(field)
     safe_value = escape_milvus_expr_string(str(value))
     return f'{safe_field} == "{safe_value}"'
 
 
 def _escape_milvus_str(value: Any) -> str:
-    """校验并转义 Milvus 表达式字符串字面量（统一 security.sanitize 实现）。"""
-    try:
-        return escape_milvus_expr_string(str(value))
-    except ValueError as exc:
-        raise PluginError(
-            PluginErrorCategory.CONFIG,
-            "invalid_milvus_filter",
-            f"VectorChannel: invalid filter value {value!r}",
-            retryable=False,
-        ) from exc
+    """兼容旧调用；新代码请用 :func:`_milvus_eq`。"""
+    from memory_app.security.sanitize import escape_milvus_expr_string
+
+    return escape_milvus_expr_string(str(value))
 
 
 def _entity_get(entity: Any, key: str) -> Any:

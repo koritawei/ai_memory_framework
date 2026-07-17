@@ -31,6 +31,7 @@ from typing import Any, Optional
 from memory_app.internal_models import MemCell, RawData
 from memory_app.pipelines import ColdPathPipeline, IngestPipeline
 from memory_app.plugins.spi.forgetting_policy import MemoryRef
+from memory_app.repositories.scope import tenant_scope_kwargs
 from memory_app.schemas.feedback import FeedbackType
 
 logger = logging.getLogger(__name__)
@@ -67,10 +68,6 @@ class IngestService:
         允许传 ``None`` 表示「解绑」,便于评测 / 测试场景。
         """
         self._cold_path = cold_path_service
-
-    def sync_index_repos(self):
-        """返回热路径 SyncIndexStage 绑定的 ES / Milvus 仓储。"""
-        return self._pipeline.sync_index_repos()
 
     async def ingest(self, raw_data_list: list[RawData]) -> list[str]:
         """执行写入。
@@ -308,8 +305,7 @@ class FeedbackService:
                 delta=delta,
                 s_max=s_max,
                 increment_access=is_positive,
-                tenant_id=tenant_id,
-                user_id=user_id,
+                **tenant_scope_kwargs(tenant_id, user_id),
             )
             if applied is None:
                 return None
@@ -317,14 +313,17 @@ class FeedbackService:
             persisted_strength = float(applied["strength"])
         else:
             new_access = old_access + (1 if is_positive else 0)
-            await self._mongo_repo.update(
+            ok = await self._mongo_repo.update(
                 target_id,
                 {
                     "strength": float(new_strength),
                     "access_count": new_access,
                     "updated_at": datetime.now(timezone.utc),
                 },
+                **tenant_scope_kwargs(tenant_id, user_id),
             )
+            if not ok:
+                return None
             persisted_strength = float(new_strength)
         return {
             "mem_cell_id": target_id,

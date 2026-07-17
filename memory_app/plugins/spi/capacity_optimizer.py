@@ -1,4 +1,4 @@
-"""CapacityOptimizer SPI —— 容量约束优化。
+"""CapacityOptimizer SPI —— 容量约束优化（设计文档 §7.7）。
 
 默认实现 ``greedy_capacity_optimizer``：贪心 + 引用检查 + 安全边际（每轮 ≤ 10%）。
 """
@@ -22,7 +22,7 @@ class CapacityOptimizer(Plugin):
     ) -> list[str]:
         """从 memories 中选出"应被遗忘"的 memory_id 列表。
 
-        目标函数::
+        目标函数（设计文档 §7.7）::
 
             F = arg min Σ s_i  s.t.  |M - F| ≤ capacity
 

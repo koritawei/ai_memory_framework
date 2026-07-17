@@ -1,4 +1,4 @@
-""" 验收：JSON Schema 校验。"""
+"""Step 0.6 验收：JSON Schema 校验。"""
 
 from __future__ import annotations
 

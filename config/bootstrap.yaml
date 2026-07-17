@@ -48,23 +48,23 @@ api_key_bindings: {}                     # api_key -> {tenant_id, user_id?}，�
 dlq_backend: "memory"                    # memory | mongo | redis
 task_runner_backend: "asyncio"           # asyncio | redis（多 worker 冷路径一致性）
 task_queue_key: "memory:tasks:cold_path"
-# ── 并发预算 ──
-background_max_concurrent: 32            # BackgroundTaskRunner / Redis handler 并发上限
-sync_index_max_concurrent: 32             # ingest 回退 per-cell 同步并发
-cold_path_llm_max_concurrent: 8           # 冷路径语义抽取 LLM 并行上限
 
 # ── 可观测 / 限流（Phase 8）──
 metrics_enabled: false
 rate_limit_enabled: false
 rate_limit_rpm: 120                      # 每 key 每分钟请求上限
 rate_limit_backend: "memory"             # memory | redis
-rate_limit_fail_open: true               # Redis 限流失败时 true=放行 false=拒绝
 
 # ── DLQ Reconciler ──
 dlq_reconcile_interval_s: 0               # 0=仅手动/admin；>0 时后台自动扫
 dlq_reconcile_batch_size: 100
 dlq_reconcile_max_retries: 5
 task_runner_consumer_enabled: true        # false 时 API 不消费 Redis 队列(交给 worker)
+
+# ── 并发预算 ──
+background_max_concurrent: 32            # BackgroundTaskRunner / Redis handler 并发上限
+sync_index_max_concurrent: 32             # ingest 回退 per-cell 同步并发
+cold_path_llm_max_concurrent: 8           # 冷路径语义抽取 LLM 并行上限
 
 # ── 启动行为 ──
 discover_entry_point_plugins: true

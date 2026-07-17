@@ -1,4 +1,4 @@
-"""FeedbackService + SynapticPlasticityReinforcer 测试。"""
+"""FeedbackService + SynapticPlasticityReinforcer 测试(Step 5.1)。"""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class _FakeMongoRepo:
     async def get_by_id(self, mid):
         return self.store.get(mid)
 
-    async def update(self, mid, updates):
+    async def update(self, mid, updates, **_scope):
         if mid in self.store:
             self.updates.append((mid, dict(updates)))
             cell = self.store[mid]
@@ -249,7 +249,7 @@ class TestFeedbackService:
         assert result["new_strength"] == pytest.approx(1.3)
         assert result["access_count"] == 1
 
-    async def test_tenant_user_mismatch_returns_none(self):
+    async def test_tenant_mismatch_returns_none(self):
         repo = _FakeMongoRepo()
         cell = _cell()
         await repo.insert(cell)
@@ -257,7 +257,7 @@ class TestFeedbackService:
         await r.start({})
         svc = FeedbackService(mongo_repo=repo, reinforcer=r)
         result = await svc.apply_feedback(
-            tenant_id="other-tenant",
+            tenant_id="other_tenant",
             user_id="u1",
             mem_cell_id=cell.mem_cell_id,
             memory_id=None,
@@ -265,3 +265,26 @@ class TestFeedbackService:
         )
         assert result is None
         assert len(repo.updates) == 0
+
+    async def test_legacy_update_path_returns_none_when_scoped_update_fails(self):
+        """无 atomic 方法时,scoped update 失败不得假装成功。"""
+
+        class _LegacyRepo(_FakeMongoRepo):
+            async def update(self, mid, updates, **_scope):
+                # 模拟 scoped filter 未命中
+                return False
+
+        repo = _LegacyRepo()
+        cell = _cell()
+        await repo.insert(cell)
+        r = SynapticPlasticityReinforcer()
+        await r.start({})
+        svc = FeedbackService(mongo_repo=repo, reinforcer=r)
+        result = await svc.apply_feedback(
+            tenant_id="t1",
+            user_id="u1",
+            mem_cell_id=cell.mem_cell_id,
+            memory_id=None,
+            feedback_type=FeedbackType.POSITIVE,
+        )
+        assert result is None

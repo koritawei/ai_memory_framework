@@ -1,4 +1,4 @@
-"""``llm_episode_extractor`` —— 冷路径 情景抽取插件。
+"""``llm_episode_extractor`` —— Phase 3 Step 3.2 情景抽取插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -14,7 +14,7 @@ ConfigCenter ``params`` 不含 client 实例。生产装配:
 ``deps._init_cold_path_service`` 在 ``factory.build("memory.generation.episode_extractor")``
 之后调 :meth:`bind_llm_client`。
 
-测试装配:fixture 直接 ``LLMEpisodeExtractor`` + ``await start({})`` +
+测试装配:fixture 直接 ``LLMEpisodeExtractor()`` + ``await start({})`` +
 ``bind_llm_client(mock)``。
 """
 
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class LLMEpisodeExtractor(EpisodeExtractor):
-    """LLM 情景抽取(冷路径 默认)。"""
+    """LLM 情景抽取(Phase 3 默认)。"""
 
     meta = PluginMeta(
         name="llm_episode_extractor",
@@ -126,7 +126,7 @@ class LLMEpisodeExtractor(EpisodeExtractor):
     async def extract(
         self,
         memcell: MemCell,
-        old_memories: list[SemanticMemory] | None = None,  # noqa: ARG002 (检索+ 用得上)
+        old_memories: list[SemanticMemory] | None = None,  # noqa: ARG002 (Phase 4+ 用得上)
         scenario: ScenarioType | None = None,
     ) -> list[EpisodicMemory]:
         """SPI 契约:从 MemCell 抽 EpisodicMemory 列表。

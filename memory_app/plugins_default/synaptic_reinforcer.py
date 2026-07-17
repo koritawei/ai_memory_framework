@@ -1,4 +1,4 @@
-"""``synaptic_plasticity_reinforcer`` —— 反馈与生命周期 默认 Reinforcer。
+"""``synaptic_plasticity_reinforcer`` —— Phase 5 Step 5.1 默认 Reinforcer。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class SynapticPlasticityReinforcer(Reinforcer):
-    """突触可塑性反馈强化(反馈与生命周期 默认)。"""
+    """突触可塑性反馈强化(Phase 5 默认)。"""
 
     meta = PluginMeta(
         name="synaptic_plasticity_reinforcer",

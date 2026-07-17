@@ -1,4 +1,4 @@
-"""``entity_boost`` —— 图与实体 Entity Boost 召回插件。
+"""``entity_boost`` —— Phase 7 Step 7.2 Entity Boost 召回插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -38,7 +38,7 @@ class EntityBoostChannel(RetrievalChannel):
         name="entity_boost",
         category="memory.retrieval.channels.entity",
         version="1.0.0",
-        description="Entity Boost(倒排索引召回);图与实体 默认 enabled=false",
+        description="Entity Boost(倒排索引召回);Phase 7 默认 enabled=false",
         config_schema={
             "type": "object",
             "additionalProperties": True,

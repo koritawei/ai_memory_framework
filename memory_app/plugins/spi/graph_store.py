@@ -1,4 +1,4 @@
-"""GraphStore SPI —— 图存储。
+"""GraphStore SPI —— 图存储（设计文档 §8.1）。
 
 默认实现 ``in_memory_lru_graph``（按 user_id 分片 + LRU 淘汰）；
 可换 ``neo4j_graph_store`` / ``nebula_graph_store``（生产场景）。
@@ -19,7 +19,7 @@ class GraphNode(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     id: str
-    node_type: str  # episode / semantic / entity / community
+    node_type: str  # episode / semantic / entity / community（§8.1.2）
     label: str
     user_id: str
     memory_id: str | None = None  # 关联的记忆 ID（若有）

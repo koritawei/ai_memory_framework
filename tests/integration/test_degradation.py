@@ -1,4 +1,4 @@
-"""故障演练:验证  降级表(管理面)。
+"""故障演练:验证 §5.4 降级表(Phase 8 Step 8.4)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 覆盖的 4 类降级
@@ -13,7 +13,7 @@
 ═══════════════════════════════════════════════════════════════════════════════
 为什么不用 docker stop
 ═══════════════════════════════════════════════════════════════════════════════
-。
+设计文档示例用 ``docker stop es`` 注入故障,但本仓 CI 默认不依赖外部服务。
 我们用 monkeypatch 模拟"组件抛 Exception",验证业务平面**正确捕获 + 降级**。
 端到端的 docker 演练可在 ops/runbook 跑,不进 unit CI。
 
@@ -127,7 +127,7 @@ def _request(top_k: int = 5) -> RetrieveMemRequest:
 # ════════════════════════════════════════════════════════════════════════════
 @pytest.mark.asyncio
 class TestRetrievalDegradation:
-    """ES / Milvus 不可用 → orchestrator 仍返回剩余通道结果。"""
+    """ES / Milvus 不可用 → orchestrator 仍返回剩余通道结果(§5.4)。"""
 
     def _build(self, channels: dict) -> RetrievalOrchestrator:
         return RetrievalOrchestrator(
@@ -184,7 +184,7 @@ class TestRetrievalDegradation:
 # ════════════════════════════════════════════════════════════════════════════
 @pytest.mark.asyncio
 class TestColdPathDegradation:
-    """LLM Provider 不可用 → 整个冷路径 skip,热路径不受影响。"""
+    """LLM Provider 不可用 → 整个冷路径 skip,热路径不受影响(§5.4)。"""
 
     async def test_llm_unavailable_skips_cold_path(self):
         from memory_app.deps import AppState

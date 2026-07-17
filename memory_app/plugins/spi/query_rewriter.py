@@ -1,7 +1,7 @@
-"""QueryRewriter SPI —— 查询改写。
+"""QueryRewriter SPI —— 查询改写（设计文档 §12.4 多轮检索）。
 
-核心实现 默认 ``identity_rewriter``（直接返回原查询）；
-写入热路径+ 切到 ``multi_query_rewriter`` 做 Agentic 多查询展开（HyDE / Multi-Query）。
+Phase 1 默认 ``identity_rewriter``（直接返回原查询）；
+Phase 2+ 切到 ``multi_query_rewriter`` 做 Agentic 多查询展开（HyDE / Multi-Query）。
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ class QueryRewriter(Plugin):
 
         约定：
         - 返回列表至少含 1 条（identity 模式即返回 ``[query]``）
-        - 多查询场景一般返回 3 条（参考  Agentic 检索 ``num_queries=3``）
+        - 多查询场景一般返回 3 条（参考 §12.4 Agentic 检索 ``num_queries=3``）
         - 改写不应改变原查询的意图大类
         - LLM 失败应抛 :class:`PluginError(retryable=True)` 让上游降级到 identity
         """

@@ -167,7 +167,7 @@ def wired_client(
 
 @contextmanager
 def wired_consolidate_client() -> Iterator[tuple[TestClient, object]]:
-    """仅装配 consolidate 端点（ 离线认知）。"""
+    """仅装配 consolidate 端点（§7 离线认知）。"""
     from datetime import datetime, timezone
 
     from memory_app import api

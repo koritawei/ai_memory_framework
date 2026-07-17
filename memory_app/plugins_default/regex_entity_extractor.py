@@ -1,16 +1,16 @@
-"""``regex_entity_extractor`` —— 图与实体 默认 EntityExtractor 插件。
+"""``regex_entity_extractor`` —— Phase 7 默认 EntityExtractor 插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 策略
 ═══════════════════════════════════════════════════════════════════════════════
-轻量启发式实体抽取(图与实体 入门级,不依赖 spaCy):
+轻量启发式实体抽取(Phase 7 入门级,不依赖 spaCy):
 - 引号内文本                 → ``QUOTED``
 - 连续大写英文词序列         → ``PROPER``
 - 连续 CJK 字符段(≥ 2 字)   → ``COMPOUND``
 - 单个长英文词(≥ 3 字)      → ``NOUN``
 
 ═══════════════════════════════════════════════════════════════════════════════
-
+设计文档要求
 ═══════════════════════════════════════════════════════════════════════════════
 - 必须按 ``normalized``(小写 / strip) 去重
 - 子串实体应被丢弃("机场" 是 "首都机场" 子串则去掉前者)
@@ -62,13 +62,13 @@ DEFAULT_STOPWORDS = frozenset(
 # ════════════════════════════════════════════════════════════════════════════
 @register
 class RegexEntityExtractor(EntityExtractor):
-    """正则启发式实体抽取(图与实体 默认 fallback)。"""
+    """正则启发式实体抽取(Phase 7 默认 fallback)。"""
 
     meta = PluginMeta(
         name="regex_entity_extractor",
         category="memory.generation.entity_extractor",
         version="1.0.0",
-        description="正则 + 启发式实体抽取(无依赖,图与实体 默认 fallback)",
+        description="正则 + 启发式实体抽取(无依赖,Phase 7 默认 fallback)",
         config_schema={
             "type": "object",
             "additionalProperties": True,

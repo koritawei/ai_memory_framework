@@ -1,4 +1,4 @@
-"""``graph_traversal`` —— 图与实体 图遍历召回插件。
+"""``graph_traversal`` —— Phase 7 Step 7.4 图遍历召回插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -39,7 +39,7 @@ class GraphTraversalChannel(RetrievalChannel):
         name="graph_traversal",
         category="memory.retrieval.channels.graph",
         version="1.0.0",
-        description="图遍历召回(BFS, max_depth=2);图与实体 默认 enabled=false",
+        description="图遍历召回(BFS, max_depth=2);Phase 7 默认 enabled=false",
         config_schema={
             "type": "object",
             "additionalProperties": True,

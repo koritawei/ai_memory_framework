@@ -1,10 +1,10 @@
-"""``llm_sbd`` —— 冷路径 LLM 模式 SBD 插件。
+"""``llm_sbd`` —— Phase 3 Step 3.1 LLM 模式 SBD 插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
 ═══════════════════════════════════════════════════════════════════════════════
 "纯 LLM" 切分实现:对整批 ``RawData`` 用 ``sbd_llm_refine`` prompt 询问
-``boundary_index``,然后在该位置二次切分。冷路径 一般**不直接**用本插件;
+``boundary_index``,然后在该位置二次切分。Phase 3 一般**不直接**用本插件;
 正式落地是 ``hybrid_sbd``(规则优先 + 仅在需要时调本类的 ``_llm_refine``)。
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -48,13 +48,13 @@ logger = logging.getLogger(__name__)
 
 @register
 class LLMSBD(BoundaryDetector):
-    """冷路径 —— 纯 LLM 切分(配合 ``sbd_llm_refine`` prompt)。"""
+    """Phase 3 Step 3.1 —— 纯 LLM 切分(配合 ``sbd_llm_refine`` prompt)。"""
 
     meta = PluginMeta(
         name="llm_sbd",
         category="memory.generation.boundary_detector",
         version="1.0.0",
-        description="LLM 模式 SBD(prompt=sbd_llm_refine);冷路径 / 灰度对照",
+        description="LLM 模式 SBD(prompt=sbd_llm_refine);Phase 3 / 灰度对照",
         config_schema={
             "type": "object",
             "additionalProperties": True,

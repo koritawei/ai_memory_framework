@@ -1,4 +1,4 @@
-"""RerankProvider SPI —— Cross-Encoder 重排 Provider。
+"""RerankProvider SPI —— Cross-Encoder 重排 Provider（设计文档 §13.2）。
 
 默认实现 ``deepinfra_qwen3_reranker``（Qwen3-Reranker-4B）；
 可换 ``cohere_reranker`` / ``local_ms_marco``。

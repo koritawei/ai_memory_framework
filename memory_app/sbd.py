@@ -1,10 +1,10 @@
-"""SBD 规则算法 + LLM 兜底辅助。
+"""SBD 规则算法 + LLM 兜底辅助(设计文档 §5.1.2 / §5.1.3)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 模块分工
 ═══════════════════════════════════════════════════════════════════════════════
 - 规则路径(纯函数 / 无状态)::func:`should_split` / :func:`detect_boundaries`
-- LLM 兜底(冷路径,异步):
+- LLM 兜底(Phase 3,异步):
   - :func:`needs_llm_refinement`   启发式判定是否需要兜底
   - :func:`format_numbered_segments` 把 segment 列表渲染为带行号文本(prompt 入参)
   - :func:`parse_llm_boundary_response` 解析 LLM JSON 响应
@@ -24,7 +24,7 @@
 3. **窗口 token**:当前 segment 累计字符 / 4 ≥ ``max_window_tokens``(默认 512)
 
 ═══════════════════════════════════════════════════════════════════════════════
-冷路径 LLM 兜底
+Phase 3 LLM 兜底
 ═══════════════════════════════════════════════════════════════════════════════
 ``HybridSBD`` 先走规则得到候选 segment 列表;若任一 segment 过大或多样性高
 (:func:`needs_llm_refinement`),把该 segment 编号化送入 LLM,LLM 返回
@@ -156,7 +156,7 @@ def parse_sbd_config(params: dict[str, Any] | None) -> SBDConfig:
 
     单字段解析失败时记 warning 并保留默认 —— 与 ``parse_fsfm_config`` /
     ``parse_reinforce_config`` 等其他配置解析器的错误处理风格一致,避免一个
-    脏字段把整个插件 ``start`` 拉崩。
+    脏字段把整个插件 ``start()`` 拉崩。
     """
     cfg = SBDConfig()
     if not params:
@@ -186,7 +186,7 @@ def parse_sbd_config(params: dict[str, Any] | None) -> SBDConfig:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# LLM 兜底辅助(冷路径, )
+# LLM 兜底辅助(Phase 3, Step 3.1)
 # ════════════════════════════════════════════════════════════════════════════
 #: 单 segment 超此 turns 数即触发 LLM 兜底(启发式默认值)
 LLM_REFINE_TURNS_THRESHOLD = 10

@@ -1,9 +1,9 @@
-"""MongoConfigCenter Change Stream 测试(管理面)。
+"""MongoConfigCenter Change Stream 测试(Phase 8 Step 8.2)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 覆盖
 ═══════════════════════════════════════════════════════════════════════════════
-- 没有 ``.watch`` 的 collection → 优雅降级,不启动 task
+- 没有 ``.watch()`` 的 collection → 优雅降级,不启动 task
 - 有 watch 时:启动后台 task,inserts → callback 收到 ConfigChangeEvent
 - 过滤无关 op_type / 无 category 的 change
 - 网络抖断后指数退避重连(单次失败 → 重连 → 继续消费)
@@ -62,7 +62,7 @@ class _FakeChangeStream:
 
 
 class _FakeCollWithWatch:
-    """带 .watch 的 fake collection;每次调用返回**同一**预设 stream。"""
+    """带 .watch() 的 fake collection;每次调用返回**同一**预设 stream。"""
 
     def __init__(self, streams: list[_FakeChangeStream]):
         self._streams = list(streams)
@@ -163,7 +163,7 @@ def _change(
 @pytest.mark.asyncio
 class TestNoWatchAttribute:
     async def test_graceful_degrade_when_collection_lacks_watch(self):
-        # 用 _FakeCollection（test_mongo_center_smoke.py 已验证可用）—— 它没有 .watch
+        # 用 _FakeCollection（test_mongo_center_smoke.py 已验证可用）—— 它没有 .watch()
         import memory_app.plugins_default  # noqa: F401  触发插件 @register
         from tests.test_mongo_center_smoke import _FakeClient
 

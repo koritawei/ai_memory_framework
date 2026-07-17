@@ -1,4 +1,4 @@
-"""IdempotencyStore SPI —— 写入幂等键。
+"""IdempotencyStore SPI —— 写入幂等键（设计文档 §12.1）。
 
 把"幂等"语义独立出 :class:`CacheStore`，便于：
 - 业务层调用更直观（``claim`` vs ``setnx``）
@@ -33,7 +33,7 @@ class IdempotencyStore(Plugin):
         约定：
         - 同一 key 多次 claim：第一次返回 ``claimed=True``，后续返回
           ``claimed=False`` 且 ``existing_value`` 为第一次的 value
-        - ``ttl_seconds`` 默认 24h ——  推荐值
+        - ``ttl_seconds`` 默认 24h —— §12.1 推荐值
         - 实现必须保证原子性（Redis SETNX / Mongo unique index）
         """
 

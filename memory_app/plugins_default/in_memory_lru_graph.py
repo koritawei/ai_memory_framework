@@ -1,4 +1,4 @@
-"""``in_memory_lru_graph`` —— 图与实体 默认 GraphStore 插件。
+"""``in_memory_lru_graph`` —— Phase 7 默认 GraphStore 插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -9,7 +9,7 @@
 ═══════════════════════════════════════════════════════════════════════════════
 适用场景
 ═══════════════════════════════════════════════════════════════════════════════
-- 图与实体 起把图能力打开,但不强依赖 Neo4j / Nebula
+- Phase 7 起把图能力打开,但不强依赖 Neo4j / Nebula
 - 单机部署 / 测试 / 评测;进程重启即丢
 - 生产建议替换为 ``neo4j_graph_store`` / ``nebula_graph_store``
 
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class InMemoryLRUGraphStore(GraphStore):
-    """内存 LRU GraphStore(图与实体 默认)。"""
+    """内存 LRU GraphStore(Phase 7 默认)。"""
 
     meta = PluginMeta(
         name="in_memory_lru_graph",
@@ -145,7 +145,10 @@ class InMemoryLRUGraphStore(GraphStore):
         max_hops: int = 2,
         edge_types: list[str] | None = None,
     ) -> tuple[list[SPIGraphNode], list[SPIGraphEdge]]:
-        nodes, edges = self._graph.traverse(
+        import asyncio
+
+        nodes, edges = await asyncio.to_thread(
+            self._graph.traverse,
             user_id=user_id,
             seed_node_ids=seed_node_ids,
             max_hops=max_hops,
@@ -192,7 +195,7 @@ def _spi_to_record_edge(edge: SPIGraphEdge) -> GraphEdgeRecord:
     if not user_id:
         raise ValueError(
             f"GraphEdge {edge.id!r} missing required user_id in extra_json; "
-            f"set extra_json['user_id'] before add_edge to ensure user-scoped traversal."
+            f"set extra_json['user_id'] before add_edge() to ensure user-scoped traversal."
         )
     return GraphEdgeRecord(
         edge_id=edge.id,

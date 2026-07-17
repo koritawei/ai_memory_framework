@@ -1,4 +1,4 @@
-"""BM25Channel + bm25_es 插件测试。"""
+"""BM25Channel + bm25_es 插件测试(Step 4.1)。"""
 
 from __future__ import annotations
 

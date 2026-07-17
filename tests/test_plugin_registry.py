@@ -1,4 +1,4 @@
-""" 验收：PluginRegistry 行为。"""
+"""Step 0.5 验收：PluginRegistry 行为。"""
 
 from __future__ import annotations
 

@@ -60,4 +60,16 @@ class ServiceBuilder(ABC):
         return True
 
 
-__all__ = ["ServiceBuilder"]
+async def shared_mongo_repo(state: "AppState"):
+    """返回进程内共享的 MongoMemCellRepo（首次创建时 ensure_indexes）。"""
+    from memory_app.repositories.mongo_repo import MongoMemCellRepo
+
+    if state.mongo_repo is not None:
+        return state.mongo_repo
+    repo = MongoMemCellRepo(state.clients.mongo_db)
+    await repo.ensure_indexes()
+    state.mongo_repo = repo
+    return repo
+
+
+__all__ = ["ServiceBuilder", "shared_mongo_repo"]

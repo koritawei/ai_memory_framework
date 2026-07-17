@@ -1,4 +1,4 @@
-"""E2E 主链路（测试方案  / ）。"""
+"""E2E 主链路（测试方案 §6.1 / §6.2）。"""
 
 from __future__ import annotations
 

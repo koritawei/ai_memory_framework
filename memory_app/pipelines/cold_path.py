@@ -1,17 +1,17 @@
-"""ColdPathPipeline —— 写入异步冷路径。
+"""ColdPathPipeline —— 写入异步冷路径(设计文档 §2.7.6 / §5.1 阶段四~六)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 阶段顺序
 ═══════════════════════════════════════════════════════════════════════════════
 ::
 
-    EpisodeExtractStage   (LLM 情景抽取,)
+    EpisodeExtractStage   (LLM 情景抽取,Step 3.2)
         ↓
-    SemanticExtractStage  (LLM 语义联想,)
+    SemanticExtractStage  (LLM 语义联想,Step 3.3)
         ↓
-    ClusterStage          (MemScene 增量聚类,)
+    ClusterStage          (MemScene 增量聚类,Step 3.4)
         ↓
-    EntityIndexStage      (实体倒排 + 图节点构建, / 7.3;extra_stage 注入)
+    EntityIndexStage      (实体倒排 + 图节点构建,Step 7.1 / 7.3;extra_stage 注入)
 
 ═══════════════════════════════════════════════════════════════════════════════
 失败语义
@@ -26,8 +26,8 @@
 - ``episode_extractor``  实现 ``await extract(MemCell, scenario) -> list[EpisodicMemory]``
 - ``semantic_extractor`` 实现 ``await extract_for_episode(EpisodicMemory) -> list[SemanticMemory]``
 - ``clusterer``          实现 ``await cluster(group_id, MemCell) -> (cluster_id, meta)``
-- ``entity_store``       :class:`EntityStore`(图与实体);None → 跳过倒排写
-- ``memory_graph``       :class:`MemoryGraph`(图与实体);None → 跳过图节点写
+- ``entity_store``       :class:`EntityStore`(Phase 7);None → 跳过倒排写
+- ``memory_graph``       :class:`MemoryGraph`(Phase 7);None → 跳过图节点写
 
 任意为 None → 对应阶段跳过(便于灰度 / 渐进上线)。
 """
@@ -91,7 +91,7 @@ class ColdPathContext:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# Stage 1: 情景抽取
+# Stage 1: 情景抽取(Step 3.2)
 # ════════════════════════════════════════════════════════════════════════════
 class EpisodeExtractStage(PipelineStage[ColdPathContext]):
     name = "episode_extract"
@@ -113,7 +113,7 @@ class EpisodeExtractStage(PipelineStage[ColdPathContext]):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# Stage 2: 语义抽取
+# Stage 2: 语义抽取(Step 3.3)
 # ════════════════════════════════════════════════════════════════════════════
 class SemanticExtractStage(PipelineStage[ColdPathContext]):
     name = "semantic_extract"
@@ -161,7 +161,7 @@ class SemanticExtractStage(PipelineStage[ColdPathContext]):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# Stage 3: 聚类
+# Stage 3: 聚类(Step 3.4)
 # ════════════════════════════════════════════════════════════════════════════
 class ClusterStage(PipelineStage[ColdPathContext]):
     name = "cluster"
@@ -191,12 +191,12 @@ class ClusterStage(PipelineStage[ColdPathContext]):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# Stage 4: 实体索引( / 7.3)
+# Stage 4: 实体索引(Step 7.1 / 7.3)
 # ════════════════════════════════════════════════════════════════════════════
 class EntityIndexStage(PipelineStage[ColdPathContext]):
     """把 ``ctx.episodes[*].key_entities`` 索引到 EntityStore + MemoryGraph。
 
-    图与实体 集成点:
+    Phase 7 集成点:
     - 写 EntityStore(倒排索引,供 EntityChannel 召回)
     - 写 MemoryGraph(memory→entity ``MENTIONS`` 边,供 GraphChannel 遍历)
 
@@ -216,7 +216,7 @@ class EntityIndexStage(PipelineStage[ColdPathContext]):
         self._memory_graph = memory_graph
         self._entity_extractor = entity_extractor
 
-    # 便利:deps.py 在 图与实体 装配后再绑定
+    # 便利:deps.py 在 Phase 7 装配后再绑定
     def bind_entity_store(self, store: Any) -> None:
         self._entity_store = store
 
@@ -362,7 +362,7 @@ class ColdPathPipeline(BasePipeline[MemCell, ColdPathContext, ColdPathContext]):
     def add_extra_stage(self, stage: PipelineStage[ColdPathContext]) -> None:
         """对外开放的"追加 extra stage"API,替代 builder 直 mutate ``self._extra_stages``。
 
-        图与实体 GraphComponentsBuilder 用本方法把 EntityIndexStage 挂在主链尾部。
+        Phase 7 GraphComponentsBuilder 用本方法把 EntityIndexStage 挂在主链尾部。
         通过公共 API 而非读私有列表,内部布局变更(如未来改用 immutable tuple)
         不会让 builder 静默 no-op。
         """

@@ -1,12 +1,12 @@
-"""EntityStore —— entity→mem_cell_ids 倒排索引。
+"""EntityStore —— entity→mem_cell_ids 倒排索引(设计文档 §5.3)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
 ═══════════════════════════════════════════════════════════════════════════════
 - 提供"实体名 → 关联记忆 ID 集合"的倒排索引,供 :class:`EntityChannel` 召回
 - 与 :class:`memory_app.plugins.spi.graph_store.GraphStore` SPI **不同**:
-  - EntityStore:简单倒排索引,O(1) 查找,图与实体 入门级
-  - GraphStore:多类型节点 / 边 + 遍历,图与实体 高阶能力
+  - EntityStore:简单倒排索引,O(1) 查找,Phase 7 入门级
+  - GraphStore:多类型节点 / 边 + 遍历,Phase 7 高阶能力(Step 7.3)
 - 不是 SPI 插件,仅为业务组件;Mongo 后端 + dict fallback(测试)
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -200,8 +200,8 @@ class EntityStore:
     ) -> int:
         """从所有实体的 mem_cell_ids 中移除 mem_cell_id;返回受影响实体数。
 
-        图与实体 简化:离线巩固 离线巩固归档记忆时,EntityIndexStage 走 ARCHIVED
-        路径会复用本方法;图与实体 暂不连入,仅暴露接口。
+        Phase 7 简化:Phase 6 离线巩固归档记忆时,EntityIndexStage 走 ARCHIVED
+        路径会复用本方法;Phase 7 暂不连入,仅暴露接口。
         """
         try:
             result = await self.collection.update_many(

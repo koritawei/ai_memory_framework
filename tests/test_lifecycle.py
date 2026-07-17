@@ -1,4 +1,4 @@
-"""LifecycleUpdater 测试。"""
+"""LifecycleUpdater 测试(Step 5.2)。"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class _FakeMongoRepo:
     async def get_by_id(self, mid):
         return self.store.get(mid)
 
-    async def update(self, mid, updates):
+    async def update(self, mid, updates, **_scope):
         if mid not in self.store:
             return False
         self.updates.append((mid, dict(updates)))
@@ -135,6 +135,17 @@ class TestLifecycleUpdaterSync:
         # access +1 → 5,触发 ACTIVE
         assert out["access_count"] == 5
         assert out["state"] == MemoryState.ACTIVE
+
+    async def test_update_now_skips_tenant_mismatch(self):
+        repo = _FakeMongoRepo()
+        cell = _cell()
+        await repo.insert(cell)
+        updater = LifecycleUpdater(mongo_repo=repo)
+        out = await updater.update_now(
+            cell.mem_cell_id, tenant_id="t1", user_id="wrong-user"
+        )
+        assert out is None
+        assert repo.store[cell.mem_cell_id].access_count == 0
 
 
 # ════════════════════════════════════════════════════════════════════════════

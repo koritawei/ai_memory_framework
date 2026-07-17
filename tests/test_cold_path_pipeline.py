@@ -1,4 +1,4 @@
-"""ColdPathPipeline + ColdPathService + BackgroundTaskRunner 测试(冷路径 配套)。"""
+"""ColdPathPipeline + ColdPathService + BackgroundTaskRunner 测试(Phase 3 配套)。"""
 
 from __future__ import annotations
 

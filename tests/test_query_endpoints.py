@@ -1,4 +1,4 @@
-"""POST /v1/query/* 端点测试。"""
+"""POST /v1/query/* 端点测试(Step 7.4)。"""
 
 from __future__ import annotations
 
@@ -197,7 +197,7 @@ class TestUserMemories:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# OpenAPI:图与实体 端点齐全
+# OpenAPI:Phase 7 端点齐全
 # ════════════════════════════════════════════════════════════════════════════
 class TestOpenAPIIncludesQueryRoutes:
     @pytest.fixture

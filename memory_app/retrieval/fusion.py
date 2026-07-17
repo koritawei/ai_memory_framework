@@ -1,4 +1,4 @@
-"""RRF 融合 + 信号增强。
+"""RRF 融合 + 信号增强(设计文档 §6.0 / §6.1.2)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 RRF 公式
@@ -7,7 +7,7 @@ RRF 公式
 
     RRFScore_i = Σ_c w_c / (k + rank_c(i) + 1)
 
-- ``w_c``  通道权重(默认  表;``entity`` / ``graph`` 通道未启用时权重缺省 0)
+- ``w_c``  通道权重(默认 §6.1.2 表;``entity`` / ``graph`` 通道未启用时权重缺省 0)
 - ``rank_c(i)`` 该 memory 在通道 c 内的 rank(从 0 起)
 - ``k=60`` 平滑常数
 
@@ -18,7 +18,7 @@ RRF 公式
 
     FinalScore_i = RRFScore_i × TimeDecay_i × (1 + Imp_i)
 
-- ``TimeDecay`` 已经过  三因子衰减或 Langevin SDE,默认 1.0(无衰减)
+- ``TimeDecay`` 已经过 §7.1 三因子衰减或 Langevin SDE,默认 1.0(无衰减)
 - ``Imp``       重要性分数 [0, 1],默认 0.0(原样)
 
 调用方负责喂入 ``time_decays`` / ``importances`` —— 本类不依赖具体 ForgettingPolicy。
@@ -44,9 +44,9 @@ class RRFConfig:
     """RRF 配置。
 
     权重缺省(对应通道未启用 / 未配置):
-    - 当前版本仅 BM25 + Vector → 实际生效权重为 ``{bm25: 0.40, vector: 0.60}``
-      
-    - 冷路径+ 全通道启用 → ``{bm25: 0.30, vector: 0.40, entity: 0.15, graph: 0.15}``
+    - Phase 1 仅 BM25 + Vector → 实际生效权重为 ``{bm25: 0.40, vector: 0.60}``
+      (设计文档 §6.1.2 标注:Phase 1 ``w_semantic=0.60, w_bm25=0.40``)
+    - Phase 3+ 全通道启用 → ``{bm25: 0.30, vector: 0.40, entity: 0.15, graph: 0.15}``
 
     构造默认值采用全通道版本;`fuse` 方法对未提供的通道权重视为 0。
     """

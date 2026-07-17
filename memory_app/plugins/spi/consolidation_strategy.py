@@ -1,4 +1,4 @@
-"""ConsolidationStrategy SPI —— 离线巩固策略。
+"""ConsolidationStrategy SPI —— 离线巩固策略（设计文档 §7.4）。
 
 默认实现 ``three_phase_dreaming``：light（6h）+ deep（每日 03:00）+ rem（每周日 05:00）。
 """

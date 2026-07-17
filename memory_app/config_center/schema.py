@@ -1,4 +1,4 @@
-"""JSON Schema 校验工具。
+"""JSON Schema 校验工具（设计文档 §2.8.5）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 两个公共函数
@@ -11,7 +11,7 @@
 - 使用 Draft 2020-12 —— pydantic v2 内部也用这个版本，行为一致
 - 校验失败抛 :class:`ConfigValidationError`，附 JSON Pointer（``/k``、
   ``/params/weights/cqa``），便于运维快速定位
-- ``schema=None`` 时直接放行 —— 脚手架 / 1 大量插件还没声明 schema 时不阻塞
+- ``schema=None`` 时直接放行 —— Phase 0 / 1 大量插件还没声明 schema 时不阻塞
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from .base import ConfigValidationError
 
 
 # Validator 编译开销 ~1ms 量级,且内部解析 $ref / 编译子规则。
-# resolve 每次都重编译会让 PluginFactory.build / PromptManager.resolve 热路径白吃 CPU。
+# resolve() 每次都重编译会让 PluginFactory.build / PromptManager.resolve 热路径白吃 CPU。
 #
 # 用 id(schema) 做 cache key —— schema 是 ``PluginMeta.config_schema`` 类属性,
 # 跟随 plugin 类生命周期(进程 lifetime),id 稳定。Plugin 数量级 30,

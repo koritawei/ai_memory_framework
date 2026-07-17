@@ -1,4 +1,4 @@
-"""FSFM4DScorer + EbbinghausPolicy 插件测试。"""
+"""FSFM4DScorer + EbbinghausPolicy 插件测试(Step 5.3)。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""ImportanceScorer SPI —— FSFM 四维重要性评分。
+"""ImportanceScorer SPI —— FSFM 四维重要性评分（设计文档 §7.2）。
 
 默认实现 ``fsfm_4d``：CQA + BVE + TRS + SRC 加权综合，[-1.5, 2.25]。
 """

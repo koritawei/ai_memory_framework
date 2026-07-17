@@ -1,15 +1,15 @@
 [project]
 name = "memory-plugin-qdrant"
 version = "0.1.0"
-description = "示例:第三方 VectorStore 插件,演示 entry_points 接入 memory_app(管理面)"
+description = "示例:第三方 VectorStore 插件,演示 entry_points 接入 memory_app(Phase 8 Step 8.4)"
 requires-python = ">=3.11"
 readme = "README.md"
 
 dependencies = [
-# 真实 Qdrant 客户端在生产中应该是 'qdrant-client>=1.7'.
-# 此示例保留依赖最小化,使用进程内 dict 模拟向量索引,
-# 主仓 CI 可在不依赖外部服务的前提下运行契约测试。
-"memory-service",
+  # 真实 Qdrant 客户端在生产中应该是 'qdrant-client>=1.7'.
+  # 此示例保留依赖最小化,使用进程内 dict 模拟向量索引,
+  # 主仓 CI 可在不依赖外部服务的前提下运行契约测试。
+  "memory-service",
 ]
 
 # entry_points:Memory Service 启动时通过 importlib.metadata.entry_points

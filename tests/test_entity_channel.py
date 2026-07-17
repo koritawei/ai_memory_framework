@@ -1,4 +1,4 @@
-"""EntityChannel + entity_boost 插件测试。"""
+"""EntityChannel + entity_boost 插件测试(Step 7.2)。"""
 
 from __future__ import annotations
 

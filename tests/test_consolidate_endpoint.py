@@ -1,4 +1,4 @@
-"""POST /v1/memory/consolidate 端点测试。"""
+"""POST /v1/memory/consolidate 端点测试(Step 6.4)。"""
 
 from __future__ import annotations
 

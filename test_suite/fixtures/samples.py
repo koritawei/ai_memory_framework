@@ -1,4 +1,4 @@
-"""测试方案  样本数据。"""
+"""测试方案 §2.2 样本数据。"""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def minimal_ingest_body(*, tenant_id: str = "t1", user_id: str = "u1") -> dict:
 
 
 def beijing_trip_ingest_body(*, tenant_id: str = "t1", user_id: str = "u1") -> dict:
-    """E2E 主链路：出差 + 偏好 + 客户拜访。"""
+    """E2E 主链路：出差 + 偏好 + 客户拜访（§6.2）。"""
     return {
         "tenant_id": tenant_id,
         "user_id": user_id,

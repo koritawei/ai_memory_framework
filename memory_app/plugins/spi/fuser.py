@@ -1,4 +1,4 @@
-"""Fuser SPI —— 多路融合。
+"""Fuser SPI —— 多路融合（设计文档 §6.1.2）。
 
 把多个 :class:`RetrievalChannel` 的输出融合为统一排名。
 默认实现 ``weighted_rrf``：``RRFScore = Σ w_ch / (k + rank_ch)``，``k=60``。

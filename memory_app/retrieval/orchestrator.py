@@ -1,11 +1,11 @@
-"""RetrievalOrchestrator —— 检索管线对外门面。
+"""RetrievalOrchestrator —— 检索管线对外门面(设计文档 §6)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
 ═══════════════════════════════════════════════════════════════════════════════
 - :class:`RetrievalPipeline` 的别名 + 显式 ``retrieve`` 方法,便于 Router 层调
 - 路由层 ``Depends(get_retrieval_orchestrator)`` 注入实例
-- 提供 :meth:`add_finalize_hook` 公开 API,供下游 builder(如 反馈与生命周期
+- 提供 :meth:`add_finalize_hook` 公开 API,供下游 builder(如 Phase 5
   LifecycleUpdater)在 finalize 后插入额外逻辑,**替代旧版 monkey-patch**
   ``orch.finalize = wrapped_finalize`` 反模式
 
@@ -27,9 +27,11 @@ from memory_app.schemas.retrieve import RetrieveMemRequest
 
 logger = logging.getLogger(__name__)
 
-#: finalize hook 签名:``async (results: list[RankedMemory]) -> None``。
+#: finalize hook 签名:``async (ctx, results) -> None``。
 #: 异常被本类吞掉并 warn(单个钩子失败不应破坏检索本体)。
-FinalizeHook = Callable[[list[RankedMemory]], Awaitable[None]]
+FinalizeHook = Callable[
+    [RetrievalPipelineContext, list[RankedMemory]], Awaitable[None]
+]
 
 
 class RetrievalOrchestrator(RetrievalPipeline):
@@ -42,7 +44,7 @@ class RetrievalOrchestrator(RetrievalPipeline):
     def add_finalize_hook(self, hook: FinalizeHook) -> None:
         """注册一个在 :meth:`finalize` 之后异步执行的钩子。
 
-        典型用法:反馈与生命周期 ``LifecycleUpdater.on_retrieval_hit`` 由
+        典型用法:Phase 5 ``LifecycleUpdater.on_retrieval_hit`` 由
         ``FeedbackLifecycleBuilder`` 在装配末尾注册,无需 monkey-patch。
 
         钩子按注册顺序串行调用,**单个钩子抛异常仅记 warn 不打断后续钩子**。
@@ -52,7 +54,7 @@ class RetrievalOrchestrator(RetrievalPipeline):
     def add_recall_channel(self, name: str, channel) -> bool:  # type: ignore[no-untyped-def]
         """对外开放的"追加 recall 通道"API,替代 builder 直读 ``self._recall``。
 
-        图与实体 GraphComponentsBuilder 在 entity / graph 通道就绪后调本方法
+        Phase 7 GraphComponentsBuilder 在 entity / graph 通道就绪后调本方法
         把通道挂上,以前是 ``getattr(orch, "_recall", None).add_channel(...)``
         —— 重构 ``RetrievalPipeline`` 内部布局时会静默断掉。
 
@@ -73,7 +75,7 @@ class RetrievalOrchestrator(RetrievalPipeline):
         results = await super().finalize(ctx)
         for hook in self._finalize_hooks:
             try:
-                await hook(results)
+                await hook(ctx, results)
             except Exception as e:  # noqa: BLE001
                 logger.warning(
                     "retrieval finalize hook %s failed: %s",

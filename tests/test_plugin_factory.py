@@ -1,4 +1,4 @@
-""" + 0.6 联调：PluginFactory + FileConfigCenter 通路。"""
+"""Step 0.5 + 0.6 联调：PluginFactory + FileConfigCenter 通路。"""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def factory(default_config_path: Path, project_cwd):
 
 @pytest.mark.asyncio
 async def test_factory_builds_default_sbd(factory: PluginFactory):
-    """写入热路径 起 default.yaml 切到 rule_sbd;noop_sbd 仍可通过显式覆盖访问。"""
+    """Phase 2 起 default.yaml 切到 rule_sbd;noop_sbd 仍可通过显式覆盖访问。"""
     sbd = await factory.build("memory.generation.boundary_detector")
     assert sbd.meta.name == "rule_sbd"
     health = await sbd.health()
@@ -54,7 +54,7 @@ async def test_factory_builds_default_sbd(factory: PluginFactory):
 
 @pytest.mark.asyncio
 async def test_factory_builds_default_fuser(factory: PluginFactory):
-    """检索 起 default.yaml 切到 weighted_rrf;noop_fuser 仍可通过显式覆盖访问。"""
+    """Phase 4 起 default.yaml 切到 weighted_rrf;noop_fuser 仍可通过显式覆盖访问。"""
     fuser = await factory.build("memory.retrieval.fuser")
     assert fuser.meta.name == "weighted_rrf"
     health = await fuser.health()
@@ -162,6 +162,6 @@ async def test_factory_start_failure_does_not_leak_lock():
         with pytest.raises(PluginError):
             await fac.build("test.broken")
     # 关键断言:_build_locks 不应残留失败 build 的 lock
-    assert ("test.broken", "broken", "*", "*", 1) not in fac._build_locks, (
+    assert ("test.broken", "broken", "*", 1) not in fac._build_locks, (
         "失败路径泄漏了 lock 引用,_build_locks 字典会无限增长"
     )

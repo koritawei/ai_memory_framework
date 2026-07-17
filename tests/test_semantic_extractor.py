@@ -1,4 +1,4 @@
-"""SemanticMemoryExtractor + LLM10AssociationExtractor 测试。"""
+"""SemanticMemoryExtractor + LLM10AssociationExtractor 测试(Step 3.3)。"""
 
 from __future__ import annotations
 

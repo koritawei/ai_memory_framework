@@ -1,4 +1,4 @@
-"""``llm_10_association`` —— 冷路径 语义抽取插件。
+"""``llm_10_association`` —— Phase 3 Step 3.3 语义抽取插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -6,7 +6,7 @@
 :class:`memory_app.plugins.spi.semantic_extractor.SemanticExtractor` 的默认实现,
 内部委托 :class:`memory_app.extractors.SemanticMemoryExtractor`。
 
-名字 "10_association" 来自 "10 联想策略" —— LLM 应产出约 10 条
+名字 "10_association" 来自设计文档 §5.1.6 "10 联想策略" —— LLM 应产出约 10 条
 语义记忆;实际产出条数由 ``min_items`` / ``max_items`` 限制(默认 [0, 20])。
 
 ═══════════════════════════════════════════════════════════════════════════════

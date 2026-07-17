@@ -14,8 +14,6 @@ from memory_app.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
-_MAX_MEMORY_BUCKETS = 4096
-
 
 class _MemoryBucket:
     def __init__(self, rpm: int) -> None:
@@ -38,7 +36,7 @@ class _MemoryBucket:
 
 
 class RateLimitMiddleware:
-    """按 client IP（或 ``X-User-Id``）RPM 限流。"""
+    """按已验证身份或 client IP 做 RPM 限流。"""
 
     _SKIP_PREFIXES = (
         "/health/",
@@ -53,7 +51,6 @@ class RateLimitMiddleware:
         self.app = app
         self._settings = settings
         self._buckets: dict[str, _MemoryBucket] = {}
-        self._buckets_lock = asyncio.Lock()
 
     def _settings_or_default(self) -> Settings:
         return self._settings or get_settings()
@@ -61,24 +58,13 @@ class RateLimitMiddleware:
     def _rate_key(self, request: Request) -> str:
         identity = getattr(request.state, "identity", None)
         if identity is not None:
-            tid = getattr(identity, "tenant_id", None) or ""
-            uid = getattr(identity, "user_id", None) or ""
-            if tid or uid:
-                return f"identity:{tid}:{uid}"
-        user = request.headers.get("X-User-Id")
-        if user:
-            return f"user:{user}"
+            if identity.user_id:
+                return f"user:{identity.tenant_id}:{identity.user_id}"
+            return f"tenant:{identity.tenant_id}"
         client = request.client.host if request.client else "unknown"
         return f"ip:{client}"
 
-    async def _memory_bucket(self, key: str, rpm: int) -> _MemoryBucket:
-        async with self._buckets_lock:
-            if key not in self._buckets and len(self._buckets) >= _MAX_MEMORY_BUCKETS:
-                for stale in list(self._buckets.keys())[:1024]:
-                    self._buckets.pop(stale, None)
-            return self._buckets.setdefault(key, _MemoryBucket(rpm))
-
-    async def _allow_redis(self, redis: Any, key: str, rpm: int, *, fail_open: bool) -> bool:
+    async def _allow_redis(self, redis: Any, key: str, rpm: int) -> bool:
         window_key = f"memory:rl:{key}:{int(time.time()) // 60}"
         try:
             count = await redis.incr(window_key)
@@ -86,8 +72,9 @@ class RateLimitMiddleware:
                 await redis.expire(window_key, 120)
             return int(count) <= rpm
         except Exception as e:  # noqa: BLE001
-            logger.warning("redis rate limit failed: %s", e)
-            return fail_open
+            logger.warning("redis rate limit failed (memory fallback): %s", e)
+            bucket = self._buckets.setdefault(key, _MemoryBucket(rpm))
+            return await bucket.allow()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -103,19 +90,18 @@ class RateLimitMiddleware:
             return
         rpm = max(1, int(settings.rate_limit_rpm))
         key = self._rate_key(request)
-        fail_open = bool(settings.rate_limit_fail_open)
         allowed = True
         if settings.rate_limit_backend == "redis":
             from memory_app.deps import app_state
 
             redis = app_state.clients.redis_client if app_state else None
             if redis is not None:
-                allowed = await self._allow_redis(redis, key, rpm, fail_open=fail_open)
+                allowed = await self._allow_redis(redis, key, rpm)
             else:
-                bucket = await self._memory_bucket(key, rpm)
+                bucket = self._buckets.setdefault(key, _MemoryBucket(rpm))
                 allowed = await bucket.allow()
         else:
-            bucket = await self._memory_bucket(key, rpm)
+            bucket = self._buckets.setdefault(key, _MemoryBucket(rpm))
             allowed = await bucket.allow()
         if not allowed:
             response = JSONResponse(

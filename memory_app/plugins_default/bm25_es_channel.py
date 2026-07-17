@@ -1,4 +1,4 @@
-"""``bm25_es`` —— 检索 BM25 召回插件。
+"""``bm25_es`` —— Phase 4 Step 4.1 BM25 召回插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class BM25ESChannel(RetrievalChannel):
-    """ES BM25 召回(检索 默认)。"""
+    """ES BM25 召回(Phase 4 默认)。"""
 
     meta = PluginMeta(
         name="bm25_es",

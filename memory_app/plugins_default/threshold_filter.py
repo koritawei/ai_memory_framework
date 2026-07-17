@@ -1,4 +1,4 @@
-"""``threshold`` —— 检索 阈值过滤插件。
+"""``threshold`` —— Phase 4 Step 4.4 阈值过滤插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 策略
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class ThresholdFilter(RetrievalFilter):
-    """阈值过滤(检索 默认)。"""
+    """阈值过滤(Phase 4 默认)。"""
 
     meta = PluginMeta(
         name="threshold",

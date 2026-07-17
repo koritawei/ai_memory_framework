@@ -1,6 +1,6 @@
-# OnCall Runbook(管理面)
+# OnCall Runbook(Phase 8 Step 8.4)
 
-围绕  降级表的 4 类故障 + 第三方插件接入 SOP。
+围绕 §5.4 降级表的 4 类故障 + 第三方插件接入 SOP。
 
 ## 故障总览
 
@@ -19,7 +19,7 @@
 告警 `degraded_mode_active{service="llm"} == 1`。
 
 **自动降级行为**:
-- `AppState._init_cold_path_service` 检测到 LLM 不可达 → 整个冷路径**不启动**
+- `AppState._init_cold_path_service()` 检测到 LLM 不可达 → 整个冷路径**不启动**
 - 已运行的实例:`BackgroundTaskRunner` 的 LLM 调用任务进入 DLQ + 重试
 
 **OnCall SOP**:
@@ -29,13 +29,13 @@ curl -s -o /dev/null -w "%{http_code}\n" https://api.anthropic.com/v1/messages
 
 # 2. 看积压
 curl -s -H "X-Admin-Key: $ADMIN_KEY" \
-http://memory-svc/v1/admin/plugins/health | jq '.'
+  http://memory-svc/v1/admin/plugins/health | jq '.'
 
 # 3. 灰度切到备用 LLM
 curl -s -X POST -H "X-Admin-Key: $ADMIN_KEY" -H 'Content-Type: application/json' \
-http://memory-svc/v1/admin/config -d '{
-"category":"memory.provider.llm","name":"deepinfra_qwen",
-"params":{"model":"Qwen/Qwen3-72B-Instruct"}}'
+  http://memory-svc/v1/admin/config -d '{
+    "category":"memory.provider.llm","name":"deepinfra_qwen",
+    "params":{"model":"Qwen/Qwen3-72B-Instruct"}}'
 sleep 60   # 等 ConfigCenter watcher 推送 + PluginFactory reload
 
 # 4. 验证恢复
@@ -73,7 +73,7 @@ curl -s -X POST http://memory-svc/v1/memory/consolidate -d '{"tenant_id":"...","
 ```bash
 # 1. 看实例健康
 curl -s -H "X-Admin-Key: $ADMIN_KEY" \
-http://memory-svc/v1/admin/plugins/memory.retrieval.channels.bm25/bm25_es/health
+  http://memory-svc/v1/admin/plugins/memory.retrieval.channels.bm25/bm25_es/health
 
 # 2. 重启 ES
 docker compose -f tests/integration/compose.yaml restart es
@@ -81,7 +81,7 @@ docker compose -f tests/integration/compose.yaml restart es
 
 # 3. 强制刷新通道
 curl -s -X POST -H "X-Admin-Key: $ADMIN_KEY" \
-http://memory-svc/v1/admin/plugins/memory.retrieval.channels.bm25/bm25_es/reload
+  http://memory-svc/v1/admin/plugins/memory.retrieval.channels.bm25/bm25_es/reload
 ```
 
 **回填**:可选 — ES 期间没写入(因为 ingest 热路径会因 `es=fail` 也降级跳过 ES 写入)。恢复后跑:
@@ -121,7 +121,7 @@ uv run uvicorn memory_app.api:app --port 8000
 
 # 4. 看活动实例确认接管
 curl -s -H "X-Admin-Key: $ADMIN_KEY" http://memory-svc/v1/admin/plugins | \
-jq '.active[] | select(.category=="memory.storage.vector")'
+  jq '.active[] | select(.category=="memory.storage.vector")'
 # 期望:name=qdrant_store
 ```
 
@@ -141,18 +141,18 @@ curl -s -H "X-Admin-Key: $ADMIN_KEY" http://memory-svc/v1/admin/plugins | jq '.'
 
 # 单实例健康
 curl -s -H "X-Admin-Key: $ADMIN_KEY" \
-http://memory-svc/v1/admin/plugins/memory.retrieval.channels.bm25/bm25_es/health
+  http://memory-svc/v1/admin/plugins/memory.retrieval.channels.bm25/bm25_es/health
 
 # 配置 CRUD
 curl -s -H "X-Admin-Key: $ADMIN_KEY" \
-"http://memory-svc/v1/admin/config?category=memory.retrieval.fuser"
+  "http://memory-svc/v1/admin/config?category=memory.retrieval.fuser"
 
 # 配置历史
 curl -s -H "X-Admin-Key: $ADMIN_KEY" \
-"http://memory-svc/v1/admin/config/history?category=memory.retrieval.fuser&limit=20"
+  "http://memory-svc/v1/admin/config/history?category=memory.retrieval.fuser&limit=20"
 
 # rollback
 curl -s -X POST -H "X-Admin-Key: $ADMIN_KEY" -H 'Content-Type: application/json' \
-http://memory-svc/v1/admin/config/rollback \
--d '{"category":"memory.retrieval.fuser","target_version":3}'
+  http://memory-svc/v1/admin/config/rollback \
+  -d '{"category":"memory.retrieval.fuser","target_version":3}'
 ```

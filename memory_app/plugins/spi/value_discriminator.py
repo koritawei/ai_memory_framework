@@ -1,4 +1,4 @@
-"""ValueDiscriminator SPI —— 价值判别。
+"""ValueDiscriminator SPI —— 价值判别（设计文档 §5.1.5.10）。
 
 判定 MemCell 是否值得触发画像抽取 / 高成本 LLM 路径。
 默认实现 ``llm_scenario_discriminator`` —— LLM 二分判定 + 置信度 + 推理理由。

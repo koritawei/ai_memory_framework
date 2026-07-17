@@ -1,4 +1,4 @@
-""" 验收：health 端点。"""
+"""Step 0.4 验收：health 端点。"""
 
 from __future__ import annotations
 
@@ -42,11 +42,20 @@ def test_readiness_returns_known_checks(client: TestClient):
     body = r.json()
     assert body["status"] in ("ok", "degraded", "fail")
     checks = body["checks"]
-    for key in ("mongo", "es", "redis", "milvus", "config_center", "plugin_registry"):
+    for key in (
+        "mongo",
+        "es",
+        "redis",
+        "milvus",
+        "config_center",
+        "plugin_registry",
+        "core_services",
+    ):
         assert key in checks, f"missing check: {key}"
     # 必启项必须 ok
     assert checks["plugin_registry"]["status"] == "ok"
     assert checks["config_center"]["status"] in ("ok", "degraded")
+    assert checks["core_services"]["status"] == "ok"
 
 
 def test_admin_plugins_lists_categories(client: TestClient):

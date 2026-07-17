@@ -1,4 +1,4 @@
-"""多租户隔离 E2E（测试方案 ）。"""
+"""多租户隔离 E2E（测试方案 §6.5）。"""
 
 from __future__ import annotations
 

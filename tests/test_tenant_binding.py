@@ -32,6 +32,7 @@ def _settings(**overrides) -> Settings:
         "auth_enabled": True,
         "admin_api_key": None,
         "api_key": "global-key",
+        "tenant_binding_enabled": False,
         "trust_gateway_headers": False,
         "jwt_secret": "secret",
         "jwt_algorithm": "HS256",
@@ -39,19 +40,17 @@ def _settings(**overrides) -> Settings:
         "dlq_backend": "memory",
         "task_runner_backend": "asyncio",
         "task_queue_key": "memory:tasks",
-        "background_max_concurrent": 32,
-        "sync_index_max_concurrent": 32,
-        "cold_path_llm_max_concurrent": 8,
-        "tenant_binding_enabled": False,
         "metrics_enabled": False,
         "rate_limit_enabled": False,
         "rate_limit_rpm": 120,
         "rate_limit_backend": "memory",
-        "rate_limit_fail_open": True,
         "dlq_reconcile_interval_s": 0,
         "dlq_reconcile_batch_size": 100,
         "dlq_reconcile_max_retries": 5,
         "task_runner_consumer_enabled": True,
+        "background_max_concurrent": 32,
+        "sync_index_max_concurrent": 32,
+        "cold_path_llm_max_concurrent": 8,
         "discover_entry_point_plugins": False,
         "plugin_entry_point_group": "memory_app.plugins",
         "strict_readiness": False,
@@ -69,8 +68,14 @@ def test_api_key_binding_resolves_tenant():
 
 def test_jwt_resolves_tenant():
     s = _settings()
+    import datetime
+
     token = jwt.encode(
-        {"tenant_id": "jwt_t", "user_id": "ju"},
+        {
+            "tenant_id": "jwt_t",
+            "user_id": "ju",
+            "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1),
+        },
         "secret",
         algorithm="HS256",
     )

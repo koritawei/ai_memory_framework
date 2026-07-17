@@ -1,4 +1,4 @@
-"""SBD 纯规则算法测试( / )。"""
+"""SBD 纯规则算法测试(Step 2.1 / §5.1.2)。"""
 
 from __future__ import annotations
 

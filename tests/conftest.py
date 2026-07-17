@@ -12,7 +12,7 @@ def _isolate_settings(monkeypatch):
     """每个测试用例前，确保关键环境变量未被宿主污染，并清掉 Settings 单例缓存。
 
     同时重置 PromptManager 全局单例 —— 否则前一个 test 触发的
-    ``init_prompt_manager`` 会把 ConfigCenter 引用泄漏到下一个 test,
+    ``init_prompt_manager()`` 会把 ConfigCenter 引用泄漏到下一个 test,
     新 test 拿到 *上一个* test 的 ConfigCenter,行为不可预测。
     """
     from memory_app.prompt_runtime import reset_prompt_manager_for_test

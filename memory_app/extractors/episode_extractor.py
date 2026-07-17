@@ -1,10 +1,10 @@
-"""EpisodeMemoryExtractor —— 从 MemCell 中抽 EpisodicMemory。
+"""EpisodeMemoryExtractor —— 从 MemCell 中抽 EpisodicMemory(设计文档 §5.1.4)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
 ═══════════════════════════════════════════════════════════════════════════════
 本模块承载 LLM 情景抽取的**核心算法**:
-- 通过 :func:`get_prompt_manager.render_for(...)` 取 prompt(**禁止**硬编码)
+- 通过 :func:`get_prompt_manager().render_for(...)` 取 prompt(**禁止**硬编码)
 - 调注入的 ``llm_client.generate(prompt)`` 取 LLM JSON
 - :func:`parse_episode_response` 容错解析 → 转 :class:`EpisodicMemory` 列表
 - 解析失败时退到"整段摘要"兜底,**不**抛异常

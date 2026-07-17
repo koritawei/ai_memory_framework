@@ -1,4 +1,4 @@
-"""Demo: 写入热路径 写入热路径(``POST /v1/memory/ingest``)。
+"""Demo: Phase 2 写入热路径(``POST /v1/memory/ingest``)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 本 demo 走读
@@ -107,7 +107,7 @@ async def test_demo_full_ingest_writes_to_mongo_es_and_skips_milvus_without_embe
 
     # ── 断言:返回值 = 两个 MemCell 的 id,顺序与 segment 顺序一致 ──────
     assert len(mem_cell_ids) == 2, "两 session → 两 MemCell"
-    assert all(isinstance(mid, str) and mid for mid in mem_cell_ids),\
+    assert all(isinstance(mid, str) and mid for mid in mem_cell_ids), \
         "mem_cell_id 必须是非空字符串"
 
     # ── 断言:SOT(MongoDB)写入正确 ──────────────────────────────────────
@@ -132,7 +132,7 @@ async def test_demo_full_ingest_writes_to_mongo_es_and_skips_milvus_without_embe
 
     # ── 断言:Milvus 无调用 —— 因为 cell 没有 embedding(关键不变量)────
     assert fake_milvus.calls == [], (
-        "写入热路径 默认 cell 无 embedding;Milvus 应被跳过,不报错也不入 DLQ"
+        "Phase 2 默认 cell 无 embedding;Milvus 应被跳过,不报错也不入 DLQ"
     )
 
     # ── 断言:DLQ 为空(全链路成功)──────────────────────────────────────
@@ -204,7 +204,7 @@ async def test_demo_ingest_with_embedding_writes_to_milvus(
 async def test_demo_ingest_es_failure_records_dlq_but_succeeds(
     fake_mongo, fake_milvus
 ):
-    """这是 降级表的关键不变量 —— ES 抖动**不**阻塞业务平面写入。
+    """这是设计文档 §5.4 降级表的关键不变量 —— ES 抖动**不**阻塞业务平面写入。
 
     诊断价值:
     - 热路径返回的 mem_cell_id 数量与请求一致

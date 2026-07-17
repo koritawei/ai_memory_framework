@@ -1,11 +1,11 @@
-"""MemCell 在 Elasticsearch 的索引层。
+"""MemCell 在 Elasticsearch 的索引层(设计文档 §5.2)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
 ═══════════════════════════════════════════════════════════════════════════════
-ES 承载 BM25 全文检索;检索 起被 ``BM25Channel`` 用作多路召回之一。
+ES 承载 BM25 全文检索;Phase 4 起被 ``BM25Channel`` 用作多路召回之一。
 
-文档结构(写入热路径 最小集合)
+文档结构(Phase 2 最小集合)
 ─────────────────────────────────────────────────────────────────────────────
 ``mem_cell_id``      doc id,与 ``MemCell.mem_cell_id`` 一致
 ``tenant_id``        租户隔离(过滤索引)
@@ -54,7 +54,7 @@ class ESMemCellRepo:
     async def ensure_index(self) -> None:
         """启动期幂等创建索引;失败仅 warn。
 
-        写入热路径 用最小映射;检索 起按需扩展(``analyzer`` / 多字段等)。
+        Phase 2 用最小映射;Phase 4 起按需扩展(``analyzer`` / 多字段等)。
         """
         try:
             exists = await self._es.indices.exists(index=self.index_name)

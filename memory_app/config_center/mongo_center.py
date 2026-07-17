@@ -4,14 +4,14 @@
 通用流程（resolve / write / history / watch / 缓存 / version 自增）由
 :class:`DBConfigCenter` + :class:`BaseConfigCenter` 完成。
 
-管理面:``_db_start_native_watch`` 落地 MongoDB Change Stream:
+Phase 8 Step 8.2:``_db_start_native_watch`` 落地 MongoDB Change Stream:
 - 启动后台 task 循环 ``collection.watch(...)`` 拉变更
 - 把 insert / update / replace 转成 :class:`ConfigChangeEvent` 喂给 ``on_event``
 - 网络抖断后指数退避重连(1s → 30s 上限)
 - ``_db_stop_native_watch`` 触发 ``stop_event`` + 取消 task 干净退出
 
 注意:Change Stream **要求** Mongo 服务端是副本集(replica set)或分片集群
-单节点 standalone 不支持。本实现优雅降级:``watch`` 抛错时仅 log + 退避重试,
+单节点 standalone 不支持。本实现优雅降级:``watch()`` 抛错时仅 log + 退避重试,
 TTL 缓存(默认 5s)兜底,业务平面不受影响。
 
 依赖:``motor.motor_asyncio.AsyncIOMotorClient`` 由调用方注入。
@@ -134,7 +134,7 @@ class MongoConfigCenter(DBConfigCenter):
     async def _db_start_native_watch(
         self, on_event: Callable[[ConfigChangeEvent], Awaitable[None]]
     ) -> None:
-        """管理面:启动 Change Stream 后台循环。
+        """Phase 8 Step 8.2:启动 Change Stream 后台循环。
 
         若 collection 没有 ``watch`` 方法(典型场景:测试用 fake client 不打 stream),
         优雅降级为"只记 log",TTL 缓存(默认 5s)兜底。
@@ -144,7 +144,7 @@ class MongoConfigCenter(DBConfigCenter):
         watch_fn = getattr(self._coll, "watch", None)
         if not callable(watch_fn):
             logger.info(
-                "MongoConfigCenter: collection has no .watch (likely fake / standalone mongo);"
+                "MongoConfigCenter: collection has no .watch() (likely fake / standalone mongo);"
                 " relying on TTL cache (%.1fs).",
                 self.overrides_cache_ttl_seconds,
             )
@@ -176,7 +176,7 @@ class MongoConfigCenter(DBConfigCenter):
         self._native_watch_started = False
 
     # ════════════════════════════════════════════════════════════
-    # Change Stream 主循环(管理面)
+    # Change Stream 主循环(Phase 8 Step 8.2)
     # ════════════════════════════════════════════════════════════
     async def _run_change_stream(
         self,

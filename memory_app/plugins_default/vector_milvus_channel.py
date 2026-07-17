@@ -1,4 +1,4 @@
-"""``vector_milvus`` —— 检索 向量召回插件。
+"""``vector_milvus`` —— Phase 4 Step 4.2 向量召回插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class VectorMilvusChannel(RetrievalChannel):
-    """Milvus 向量召回(检索 默认)。"""
+    """Milvus 向量召回(Phase 4 默认)。"""
 
     meta = PluginMeta(
         name="vector_milvus",

@@ -1,15 +1,15 @@
-"""MemCell 在 MongoDB 的持久化层。
+"""MemCell 在 MongoDB 的持久化层(设计文档 §5.2)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色:SOT(Source of Truth)
 ═══════════════════════════════════════════════════════════════════════════════
-按  三库映射,MongoDB 是 MemCell 的**唯一**真值源:
+按 §5.2 三库映射,MongoDB 是 MemCell 的**唯一**真值源:
 - 写入热路径首先落 MongoDB;成功后再同步 ES + Milvus
 - ES / Milvus 数据丢失时,可由 MongoDB 重建索引
 - DLQ 记录不一致项,由离线 Reconciler 5min 扫一次重试
 
 ═══════════════════════════════════════════════════════════════════════════════
-索引建议(写入热路径 启动期通过 ``ensure_indexes`` 幂等创建)
+索引建议(Phase 2 启动期通过 ``ensure_indexes`` 幂等创建)
 ═══════════════════════════════════════════════════════════════════════════════
 - 主键 ``mem_cell_id`` 唯一索引(避免 PK 冲突)
 - ``(tenant_id, user_id, created_at)`` 复合索引(按用户拉时间线)
@@ -25,6 +25,52 @@ from memory_app._compat import utcnow
 from memory_app.internal_models import MemCell
 
 logger = logging.getLogger(__name__)
+
+
+def _cell_filter(
+    mem_cell_id: str,
+    *,
+    tenant_id: str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any] | None:
+    """构造单条 filter；部分 scope（只传 tenant 或 user）时返回 ``None``（fail-closed）。"""
+    if tenant_id is not None and user_id is not None:
+        return {
+            "mem_cell_id": mem_cell_id,
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+        }
+    if tenant_id is not None or user_id is not None:
+        logger.error(
+            "partial tenant scope rejected for mem_cell_id=%s (tenant_id=%s user_id=%s)",
+            mem_cell_id,
+            tenant_id,
+            user_id,
+        )
+        return None
+    return {"mem_cell_id": mem_cell_id}
+
+
+def _bulk_scope_filter(
+    mem_cell_ids: list[str],
+    *,
+    tenant_id: str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any] | None:
+    """构造批量 filter；部分 scope 时返回 ``None``（fail-closed）。"""
+    base: dict[str, Any] = {"mem_cell_id": {"$in": list(mem_cell_ids)}}
+    if tenant_id is not None and user_id is not None:
+        base["tenant_id"] = tenant_id
+        base["user_id"] = user_id
+        return base
+    if tenant_id is not None or user_id is not None:
+        logger.error(
+            "partial tenant scope rejected for bulk op (tenant_id=%s user_id=%s)",
+            tenant_id,
+            user_id,
+        )
+        return None
+    return base
 
 
 class MongoMemCellRepo:
@@ -70,13 +116,32 @@ class MongoMemCellRepo:
         return cell.mem_cell_id
 
     async def insert_many(self, cells: Iterable[MemCell]) -> list[str]:
-        """批量插入。失败抛原异常;调用方根据 ``ordered=False`` 做部分重试。"""
+        """批量插入（``ordered=False``）。部分失败时返回**实际写入**的 id 列表。"""
         cells_list = list(cells)
         if not cells_list:
             return []
         docs = [c.model_dump(mode="json") for c in cells_list]
-        await self.collection.insert_many(docs, ordered=False)
-        return [c.mem_cell_id for c in cells_list]
+        try:
+            await self.collection.insert_many(docs, ordered=False)
+            return [c.mem_cell_id for c in cells_list]
+        except Exception as e:  # noqa: BLE001
+            bulk_err = _as_bulk_write_error(e)
+            if bulk_err is None:
+                raise
+            failed_indices = _bulk_write_failed_indices(bulk_err)
+            inserted = [
+                cells_list[i].mem_cell_id
+                for i in range(len(cells_list))
+                if i not in failed_indices
+            ]
+            if not inserted:
+                raise
+            logger.warning(
+                "insert_many partial failure: inserted %d/%d mem_cells",
+                len(inserted),
+                len(cells_list),
+            )
+            return inserted
 
     # ════════════════════════════════════════════════════════════════════════
     # 读取
@@ -90,9 +155,13 @@ class MongoMemCellRepo:
         return MemCell.model_validate(doc)
 
     async def get_by_id_scoped(
-        self, mem_cell_id: str, *, tenant_id: str, user_id: str
+        self,
+        mem_cell_id: str,
+        *,
+        tenant_id: str,
+        user_id: str,
     ) -> MemCell | None:
-        """按主键 + 租户/用户作用域查;不存在或不匹配返回 None。"""
+        """按主键 + 租户 + 用户查;用于反馈等需强制隔离的读写路径。"""
         doc = await self.collection.find_one(
             {
                 "mem_cell_id": mem_cell_id,
@@ -105,17 +174,32 @@ class MongoMemCellRepo:
         doc.pop("_id", None)
         return MemCell.model_validate(doc)
 
-    async def get_by_ids(self, mem_cell_ids: list[str]) -> list[MemCell]:
+    async def get_by_ids(
+        self,
+        mem_cell_ids: list[str],
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[MemCell]:
         """批量查 —— 一次 ``{$in:[…]}`` 替代 N 次 ``find_one``。
 
-        - 顺序按入参 ``mem_cell_ids`` 保留(底层 cursor 返回顺序不保证)
-        - 不存在的 id 被静默丢弃,**不**返回 ``None`` 占位 ——
-          调用方按 id 自行映射 ``{m.mem_cell_id: m for m in result}``
+        传入 ``tenant_id`` / ``user_id`` 时在查询层强制租户隔离。
         """
         if not mem_cell_ids:
             return []
-        ids = list(dict.fromkeys(mem_cell_ids))  # 去重保序
-        cursor = self.collection.find({"mem_cell_id": {"$in": ids}})
+        ids = list(dict.fromkeys(mem_cell_ids))
+        filt: dict[str, Any] = {"mem_cell_id": {"$in": ids}}
+        if tenant_id is not None and user_id is not None:
+            filt["tenant_id"] = tenant_id
+            filt["user_id"] = user_id
+        elif tenant_id is not None or user_id is not None:
+            logger.error(
+                "partial tenant scope rejected for get_by_ids (tenant_id=%s user_id=%s)",
+                tenant_id,
+                user_id,
+            )
+            return []
+        cursor = self.collection.find(filt)
         if hasattr(cursor, "to_list"):
             docs = await cursor.to_list(length=len(ids))
         else:
@@ -127,20 +211,34 @@ class MongoMemCellRepo:
     # ════════════════════════════════════════════════════════════════════════
     # 更新
     # ════════════════════════════════════════════════════════════════════════
-    async def update(self, mem_cell_id: str, updates: dict[str, Any]) -> bool:
+    async def update(
+        self,
+        mem_cell_id: str,
+        updates: dict[str, Any],
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> bool:
         """部分字段更新。返回是否真有文档被改动。"""
+        filt = _cell_filter(mem_cell_id, tenant_id=tenant_id, user_id=user_id)
+        if filt is None:
+            return False
         result = await self.collection.update_one(
-            {"mem_cell_id": mem_cell_id}, {"$set": updates}
+            filt,
+            {"$set": updates},
         )
         return bool(getattr(result, "modified_count", 0))
 
     # ════════════════════════════════════════════════════════════════════════
-    # 批量状态变更(离线巩固 巩固 / 容量回收时用)
+    # 批量状态变更(Phase 6 巩固 / 容量回收时用)
     # ════════════════════════════════════════════════════════════════════════
     async def bulk_set_state(
         self,
         mem_cell_ids: list[str],
         new_state: Any,
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
     ) -> int:
         """把一批 cell 的 ``state`` 字段一次性置为 ``new_state``。
 
@@ -152,14 +250,19 @@ class MongoMemCellRepo:
         if not mem_cell_ids:
             return 0
         state_value = new_state.value if hasattr(new_state, "value") else str(new_state)
+        filt = _bulk_scope_filter(
+            mem_cell_ids, tenant_id=tenant_id, user_id=user_id
+        )
+        if filt is None:
+            return 0
         result = await self.collection.update_many(
-            {"mem_cell_id": {"$in": list(mem_cell_ids)}},
+            filt,
             {"$set": {"state": state_value, "updated_at": utcnow()}},
         )
         return int(getattr(result, "modified_count", 0))
 
     # ════════════════════════════════════════════════════════════════════════
-    # 批量生命周期更新(反馈与生命周期,检索命中后批量 +access)
+    # 批量生命周期更新(Phase 5,检索命中后批量 +access)
     # ════════════════════════════════════════════════════════════════════════
     async def atomic_apply_strength_delta(
         self,
@@ -196,11 +299,9 @@ class MongoMemCellRepo:
                 "$add": [{"$ifNull": ["$access_count", 0]}, 1]
             }
         pipeline = [{"$set": sets}]
-        filt: dict[str, Any] = {"mem_cell_id": mem_cell_id}
-        if tenant_id is not None:
-            filt["tenant_id"] = tenant_id
-        if user_id is not None:
-            filt["user_id"] = user_id
+        filt = _cell_filter(mem_cell_id, tenant_id=tenant_id, user_id=user_id)
+        if filt is None:
+            return None
         coll = self.collection
         if hasattr(coll, "find_one_and_update"):
             try:
@@ -211,11 +312,14 @@ class MongoMemCellRepo:
                     return_document=ReturnDocument.AFTER,
                 )
             except ImportError:
-                # 测试 fake 无 pymongo 依赖时,降级为 update + get
                 await coll.update_one(filt, pipeline)
-                cell = await self.get_by_id_scoped(
-                    mem_cell_id, tenant_id=tenant_id or "", user_id=user_id or ""
-                ) if tenant_id is not None and user_id is not None else await self.get_by_id(mem_cell_id)
+                cell = (
+                    await self.get_by_id_scoped(
+                        mem_cell_id, tenant_id=tenant_id, user_id=user_id
+                    )
+                    if tenant_id is not None and user_id is not None
+                    else await self.get_by_id(mem_cell_id)
+                )
                 if cell is None:
                     return None
                 return {
@@ -230,12 +334,11 @@ class MongoMemCellRepo:
             }
         # 极度退化:无 find_one_and_update,串行 update + get(原子性弱)
         await coll.update_one(filt, pipeline)
-        if tenant_id is not None and user_id is not None:
-            cell = await self.get_by_id_scoped(
-                mem_cell_id, tenant_id=tenant_id, user_id=user_id
-            )
-        else:
-            cell = await self.get_by_id(mem_cell_id)
+        cell = (
+            await self.get_by_id_scoped(mem_cell_id, tenant_id=tenant_id, user_id=user_id)
+            if tenant_id is not None and user_id is not None
+            else await self.get_by_id(mem_cell_id)
+        )
         if cell is None:
             return None
         return {
@@ -249,6 +352,8 @@ class MongoMemCellRepo:
         *,
         strength_delta: float,
         s_max: float,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
     ) -> int:
         """单次 Mongo round-trip 完成 N 条 ``access_count + 1`` 与
         ``strength = min(strength + delta, s_max)``。
@@ -283,21 +388,33 @@ class MongoMemCellRepo:
                 }
             },
         ]
-        result = await self.collection.update_many(
-            {"mem_cell_id": {"$in": list(mem_cell_ids)}}, pipeline
+        filt = _bulk_scope_filter(
+            mem_cell_ids, tenant_id=tenant_id, user_id=user_id
         )
+        if filt is None:
+            return 0
+        result = await self.collection.update_many(filt, pipeline)
         return int(getattr(result, "modified_count", 0))
 
     # ════════════════════════════════════════════════════════════════════════
     # 删除
     # ════════════════════════════════════════════════════════════════════════
-    async def delete_by_id(self, mem_cell_id: str) -> bool:
+    async def delete_by_id(
+        self,
+        mem_cell_id: str,
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> bool:
         """按主键删除。返回是否真删了。"""
-        result = await self.collection.delete_one({"mem_cell_id": mem_cell_id})
+        filt = _cell_filter(mem_cell_id, tenant_id=tenant_id, user_id=user_id)
+        if filt is None:
+            return False
+        result = await self.collection.delete_one(filt)
         return bool(getattr(result, "deleted_count", 0))
 
     # ════════════════════════════════════════════════════════════════════════
-    # 离线巩固 离线巩固查询接口
+    # Phase 6 离线巩固查询接口
     # ════════════════════════════════════════════════════════════════════════
     async def find_by_state(
         self,
@@ -350,11 +467,35 @@ def _strip_id(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _count_via_find(coll: Any, filt: dict) -> int:
-    """fallback:通过 find.to_list 计数(motor / fake 通吃)。"""
+    """fallback:通过 find().to_list 计数(motor / fake 通吃)。"""
     cursor = coll.find(filt)
     if hasattr(cursor, "to_list"):
         return len(await cursor.to_list(length=10**6))
     return len(list(cursor))
+
+
+def _as_bulk_write_error(exc: BaseException) -> Any | None:
+    """识别 pymongo BulkWriteError（或测试替身）。"""
+    try:
+        from pymongo.errors import BulkWriteError
+    except ImportError:
+        BulkWriteError = None  # type: ignore[misc, assignment]
+    if BulkWriteError is not None and isinstance(exc, BulkWriteError):
+        return exc
+    details = getattr(exc, "details", None)
+    if isinstance(details, dict) and "writeErrors" in details:
+        return exc
+    return None
+
+
+def _bulk_write_failed_indices(bulk_err: Any) -> set[int]:
+    details = getattr(bulk_err, "details", None) or {}
+    errors = details.get("writeErrors") or []
+    indices: set[int] = set()
+    for err in errors:
+        if isinstance(err, dict) and "index" in err:
+            indices.add(int(err["index"]))
+    return indices
 
 
 __all__ = ["MongoMemCellRepo"]

@@ -1,11 +1,11 @@
-"""PromptManager 单例运行时。
+"""PromptManager 单例运行时(设计文档 §2.8.4.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 契约
 ═══════════════════════════════════════════════════════════════════════════════
 - :func:`init_prompt_manager(cc)`     由 FastAPI lifespan 在 ConfigCenter
                                       就绪后调用一次,设置全局 manager
-- :func:`get_prompt_manager`        业务平面(冷路径+ 提取器)取 manager
+- :func:`get_prompt_manager()`        业务平面(Phase 3+ 提取器)取 manager
                                       的**唯一**入口;未 init 时回退到
                                       :class:`StandalonePromptManager`,
                                       便于单测 / 评测脚本场景

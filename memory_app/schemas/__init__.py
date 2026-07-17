@@ -1,11 +1,11 @@
-"""外部 API 契约 Pydantic 模型。
+"""外部 API 契约 Pydantic 模型（设计文档 §3 输入层 + §6 检索 + §7.5 反馈）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 模块组织
 ═══════════════════════════════════════════════════════════════════════════════
-- :mod:`ingest`    `POST /v1/memory/ingest` 写入契约
-- :mod:`retrieve`  `POST /v1/memory/retrieve` 检索契约
-- :mod:`feedback`  `POST /v1/memory/feedback` 反馈契约
+- :mod:`ingest`    `POST /v1/memory/ingest` 写入契约（§3）
+- :mod:`retrieve`  `POST /v1/memory/retrieve` 检索契约（§6）
+- :mod:`feedback`  `POST /v1/memory/feedback` 反馈契约（§7.5）
 
 ═══════════════════════════════════════════════════════════════════════════════
 设计原则

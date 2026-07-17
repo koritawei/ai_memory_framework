@@ -1,4 +1,4 @@
-"""单路召回通道。
+"""单路召回通道(设计文档 §6.1)。
 
 - :class:`BaseRetrievalChannel`  模板方法,统一依赖检查 / 解析 / 排序
 - :class:`BM25Channel`           ES BM25 关键词召回

@@ -1,7 +1,7 @@
-"""统一配置中心。
+"""统一配置中心(设计文档 §2.8)。
 
 ═══════════════════════════════════════════════════════════════════════════════
-类层级(A + B 嵌套,)
+类层级(A + B 嵌套,§2.8.6.1)
 ═══════════════════════════════════════════════════════════════════════════════
 
 ::
@@ -13,7 +13,7 @@
             ├── MongoConfigCenter(motor 适配,mongo_center.py)
             └── (未来:PGConfigCenter / SQLiteConfigCenter)
 
-判定原则
+判定原则(§2.8.6.1)
 ─────────────────────────────────────────────────────────────────────────────
 - 后端持久化模型是「行/文档 + CRUD」 → 继承 :class:`DBConfigCenter`
 - 后端持久化模型不是 CRUD 范式(KV 树 / 远程 HTTP / 文件 mtime)→ 直接继承
@@ -23,7 +23,7 @@
 ─────────────────────────────────────────────────────────────────────────────
 - :class:`ConfigCenter`           接口契约
 - :class:`ResolvedPluginConfig`   plugin resolve 返回值
-- :class:`ResolvedPromptConfig`   prompt resolve 返回值
+- :class:`ResolvedPromptConfig`   prompt resolve 返回值(§2.8.4.1)
 - :class:`ConfigChangeEvent`      变更事件载荷
 - :class:`ConfigValidationError`  Schema 校验失败异常
 - :class:`ConfigResolver`         五级覆盖 + 5 维灰度匹配引擎

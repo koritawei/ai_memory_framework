@@ -1,4 +1,4 @@
-"""Reinforcer SPI —— 反馈强化。
+"""Reinforcer SPI —— 反馈强化（设计文档 §7.5 / §6.2.1）。
 
 把显式 / 隐式反馈映射为 strength 增量，并触发 Tier Promotion（Langevin 位置回拉）。
 默认实现 ``synaptic_plasticity_reinforcer``。
@@ -25,7 +25,7 @@ class Reinforcer(Plugin):
     ) -> float:
         """根据反馈更新 strength，返回新值。
 
-        约定：
+        约定（设计文档 §7.5 反馈信号映射）：
 
         | feedback_type      | 默认 signal_value | 效果 |
         | ------------------ | ----------------- | ---- |

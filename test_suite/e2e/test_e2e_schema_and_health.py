@@ -1,4 +1,4 @@
-"""Schema / 健康 / Admin 契约（测试方案  /  / ）。"""
+"""Schema / 健康 / Admin 契约（测试方案 §4.1 / §5.1 / §5.5）。"""
 
 from __future__ import annotations
 

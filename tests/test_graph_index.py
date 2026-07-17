@@ -1,4 +1,4 @@
-"""MemoryGraph + InMemoryGraph + InMemoryLRUGraphStore 测试。"""
+"""MemoryGraph + InMemoryGraph + InMemoryLRUGraphStore 测试(Step 7.3)。"""
 
 from __future__ import annotations
 

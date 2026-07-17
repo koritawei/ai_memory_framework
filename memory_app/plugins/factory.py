@@ -1,5 +1,5 @@
 """PluginFactory —— 串联 :class:`PluginRegistry` 与
-:class:`memory_app.config_center.ConfigCenter`。
+:class:`memory_app.config_center.ConfigCenter`（设计文档 §2.7.4.3）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 为什么需要 Factory
@@ -20,19 +20,17 @@ Factory 把这些决策集中起来，对业务平面只暴露一句：
 ═══════════════════════════════════════════════════════════════════════════════
 缓存策略
 ═══════════════════════════════════════════════════════════════════════════════
-按 ``(category, name, tenant_id, cache_user_key, version)`` 五元组缓存实例。其中：
+按 ``(category, name, tenant_id, version)`` 四元组缓存实例。其中：
 
 - ``tenant_id`` 进入 key：不同租户即使 name 相同也各自独立实例（隔离配置变更）
-- ``cache_user_key`` 进入 key：user 层覆盖或 user 相关灰度命中时为具体 ``user_id``，
-  否则为 ``"*"``（租户内共享）
 - ``version`` 进入 key：ConfigCenter 配置变更后 ``version`` 自动 bump，
   下次 ``build`` 自然产出新 key → 触发新建实例
 
 ═══════════════════════════════════════════════════════════════════════════════
 配置变更触发的 reload
 ═══════════════════════════════════════════════════════════════════════════════
-``attach_config_center`` 注册了 watcher 回调：当 ConfigCenter 检测到配置变更，
-受影响 category 的所有缓存实例 ``stop`` 后丢弃；下次 ``build`` 自动重建。
+``attach_config_center()`` 注册了 watcher 回调：当 ConfigCenter 检测到配置变更，
+受影响 category 的所有缓存实例 ``stop()`` 后丢弃；下次 ``build`` 自动重建。
 """
 
 from __future__ import annotations
@@ -61,16 +59,14 @@ class PluginFactory:
         # 默认走全局 registry，便于绝大多数生产路径
         self._registry = registry or default_registry
         self._config = config_center
-        # 缓存 key: (category, name, tenant_id_or_*, cache_user_key, config_version)
-        self._instances: dict[tuple[str, str, str, str, int], Plugin] = {}
-        # 保护 _instances 的并发 read-modify-write（config reload / manual release）
-        self._instances_lock: asyncio.Lock = asyncio.Lock()
+        # 缓存 key: (category, name, tenant_id_or_*, config_version)
+        self._instances: dict[tuple[str, str, str, int], Plugin] = {}
         # 性能:按 cache_key 分锁 —— 不同 (category, tenant, version) 的 build
         # 可以并发进行;原全局 ``_lock`` 让 ``factory.build("fuser")`` 等待
-        # ``factory.build("reranker")`` 的 ``start`` 完成,启动期串行 N 倍延迟。
+        # ``factory.build("reranker")`` 的 ``start()`` 完成,启动期串行 N 倍延迟。
         # ``setdefault`` 在 CPython 是 GIL-原子的;多并发同 key 时偶发多创建一个
         # Lock 是安全的(下次同 key 命中 instance cache fast-path,新 lock 永不再用)
-        self._build_locks: dict[tuple[str, str, str, str, int], asyncio.Lock] = {}
+        self._build_locks: dict[tuple[str, str, str, int], asyncio.Lock] = {}
         # 防止重复挂 watcher（多次 attach 同一 ConfigCenter）
         self._watcher_attached = False
 
@@ -90,7 +86,7 @@ class PluginFactory:
         :param tenant_id: 租户隔离用；不同租户共享 SPI 但配置可独立
         :param user_id: 用户隔离用；通常仅参与灰度路由，不进缓存 key
         :param request_override: 仅本次调用生效的临时覆盖（受白名单约束）
-        :raises PluginError: ConfigCenter 未挂接或 ``start`` 失败
+        :raises PluginError: ConfigCenter 未挂接或 ``start()`` 失败
         """
         if self._config is None:
             raise PluginError(
@@ -104,7 +100,7 @@ class PluginFactory:
         # request_override 是"仅本次调用生效"的语义:必须 bypass cache,
         # 否则首个传 override-A 的请求把实例缓存进去,后续不传 override
         # (或传 override-B)的请求会拿到带 A 参数的旧实例 —— 静默语义错误。
-        # 临时实例 start 后立即销毁,不进 _instances。
+        # 临时实例 start() 后立即销毁,不进 _instances。
         bypass_cache = request_override is not None
         if bypass_cache:
             cls = self._registry.get(category, cfg.name)
@@ -123,24 +119,15 @@ class PluginFactory:
                 category, cfg.name, tenant_id,
             )
             return instance
-        cache_key = (
-            category,
-            cfg.name,
-            tenant_id or "*",
-            cfg.cache_user_key,
-            cfg.version,
-        )
-        async with self._instances_lock:
-            cached = self._instances.get(cache_key)
-        if cached is not None:
-            return cached
+        cache_key = (category, cfg.name, tenant_id or "*", cfg.version)
+        if cache_key in self._instances:
+            return self._instances[cache_key]
         # double-checked locking + per-key 锁:不同 key 的 build 互相并发
         lock = self._build_locks.setdefault(cache_key, asyncio.Lock())
         try:
             async with lock:
-                async with self._instances_lock:
-                    if cache_key in self._instances:
-                        return self._instances[cache_key]
+                if cache_key in self._instances:
+                    return self._instances[cache_key]
                 cls = self._registry.get(category, cfg.name)
                 instance = cls()
                 try:
@@ -153,8 +140,7 @@ class PluginFactory:
                         f"{category}/{cfg.name} start failed: {e}",
                         cause=e,
                     ) from e
-                async with self._instances_lock:
-                    self._instances[cache_key] = instance
+                self._instances[cache_key] = instance
                 logger.info(
                     "plugin started: %s/%s tenant=%s version=%d",
                     category, cfg.name, tenant_id, cfg.version,
@@ -186,17 +172,15 @@ class PluginFactory:
     async def _on_config_change(self, event: "ConfigChangeEvent") -> None:
         """ConfigCenter watcher 回调：丢弃受影响 category 的缓存实例。
 
-        策略：**丢弃 + 下次重建** 而不是 ``reload`` —— 实现简单，
+        策略：**丢弃 + 下次重建** 而不是 ``reload()`` —— 实现简单，
         且能正确处理 ``name`` 切换（如 ``rule_sbd`` → ``hybrid_sbd``）。
         ``event.category == "*"`` 时表示全局变更（如 YAML 整体重载），全部丢弃。
         """
         affected = [
-            key for key in list(self._instances.keys())
-            if event.category in ("*", key[0])
+            key for key in self._instances.keys() if event.category in ("*", key[0])
         ]
         for key in affected:
-            async with self._instances_lock:
-                inst = self._instances.pop(key, None)
+            inst = self._instances.pop(key, None)
             if inst is None:
                 continue
             try:
@@ -214,18 +198,17 @@ class PluginFactory:
     ) -> int:
         """手工释放某 category(可选指定 name)下所有活动实例,下次 build 重建。
 
-        管理面:供 ``POST /v1/admin/plugins/{category}/{name}/reload``
+        Phase 8 Step 8.3:供 ``POST /v1/admin/plugins/{category}/{name}/reload``
         使用,作为配置中心暂时不可达 / 灰度回滚兜底。
 
         :returns: 实际被 stop+丢弃的实例个数
         """
         affected_keys = [
-            key for key in list(self._instances.keys())
+            key for key in self._instances.keys()
             if key[0] == category and (name is None or key[1] == name)
         ]
         for key in affected_keys:
-            async with self._instances_lock:
-                inst = self._instances.pop(key, None)
+            inst = self._instances.pop(key, None)
             if inst is None:
                 continue
             try:
@@ -245,7 +228,7 @@ class PluginFactory:
     async def health_of(self, category: str, name: str) -> dict:
         """单插件实例健康(取第一个匹配的活动实例)。
 
-        管理面:供 ``GET /v1/admin/plugins/{category}/{name}/health``。
+        Phase 8 Step 8.3:供 ``GET /v1/admin/plugins/{category}/{name}/health``。
         """
         for key, inst in self._instances.items():
             if key[0] == category and key[1] == name:
@@ -265,8 +248,7 @@ class PluginFactory:
                 await inst.stop()
             except Exception as e:  # noqa: BLE001
                 logger.warning("plugin %s/%s stop failed during shutdown: %s", key[0], key[1], e)
-        async with self._instances_lock:
-            self._instances.clear()
+        self._instances.clear()
 
     # ════════════════════════════════════════════════════════════════════════
     # 观测
@@ -278,8 +260,7 @@ class PluginFactory:
                 "category": k[0],
                 "name": k[1],
                 "tenant_id": k[2],
-                "cache_user_key": k[3],
-                "config_version": k[4],
+                "config_version": k[3],
             }
             for k in self._instances.keys()
         ]
@@ -292,7 +273,7 @@ class PluginFactory:
             try:
                 out[slug] = await inst.health()
             except Exception as e:  # noqa: BLE001
-                # health 异常不应阻断整体健康检查，统一标 fail
+                # health() 异常不应阻断整体健康检查，统一标 fail
                 out[slug] = {"status": "fail", "detail": str(e)}
         return out
 

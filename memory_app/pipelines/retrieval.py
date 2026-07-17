@@ -1,4 +1,4 @@
-"""RetrievalPipeline —— 检索五阶段。
+"""RetrievalPipeline —— 检索五阶段(设计文档 §2.7.6 / §6)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 阶段顺序
@@ -145,7 +145,7 @@ class RecallStage(PipelineStage[RetrievalPipelineContext]):
         self._timeout = timeout_per_channel_s
 
     def add_channel(self, name: str, channel: _ChannelProto) -> None:
-        """注册一路新通道(供 图与实体 entity / graph 通道在装配末尾追加使用)。
+        """注册一路新通道(供 Phase 7 entity / graph 通道在装配末尾追加使用)。
 
         重复 name 直接覆盖。**替代旧版** ``recall._channels[name] = channel``
         直接 mutate private 字段的反模式。
@@ -407,7 +407,7 @@ def _flat_concat(
 ) -> list[RankedMemory]:
     """无 fuser 时降级:多路结果按 score 拼接 + 去重(取每个 mem 的最高分)。
 
-    复制策略:shallow ``model_copy`` —— 本函数只修改 ``rank`` 标量字段,
+    复制策略:shallow ``model_copy()`` —— 本函数只修改 ``rank`` 标量字段,
     不动 metadata / embedding 等共享引用;省去 deep-copy 1024d embedding 的开销。
     """
     seen: dict[str, RankedMemory] = {}

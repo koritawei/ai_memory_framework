@@ -1,4 +1,4 @@
-"""EntityChannel —— Entity Boost 召回通道。
+"""EntityChannel —— Entity Boost 召回通道(设计文档 §6.5)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 流程
@@ -23,6 +23,7 @@ from typing import Any
 from memory_app.internal_models import MemoryType, RankedMemory
 from memory_app.plugins.base import PluginError, PluginErrorCategory
 from memory_app.retrieval.channels.base import BaseRetrievalChannel
+from memory_app.retrieval.channels.mongo_fetch import fetch_mem_cells_by_ids
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,12 @@ class EntityChannel(BaseRetrievalChannel):
 
         # 3. 取回 MemCell + 算分 —— 用 get_by_ids 替代 N 次 find_one,
         #    把 200 次 Mongo round-trip 压成 1 次 $in 查询。
-        cells = await self._fetch_cells(mem_cell_ids)
+        cells = await fetch_mem_cells_by_ids(
+            self.mongo_repo,
+            mem_cell_ids,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
         if not cells:
             return {"hits": [], "entities": list(entities)}
         scored: list[tuple[float, Any]] = []
@@ -105,18 +111,6 @@ class EntityChannel(BaseRetrievalChannel):
             scored.append((matched / total_q, cell))
         scored.sort(key=lambda t: t[0], reverse=True)
         return {"hits": scored[: top_k], "entities": list(entities)}
-
-    async def _fetch_cells(self, ids: list[str]) -> list:
-        """优先批量取(``get_by_ids``);老版 repo 无该方法时退化到 gather。"""
-        batch_fn = getattr(self.mongo_repo, "get_by_ids", None)
-        if callable(batch_fn):
-            return await batch_fn(ids)
-        import asyncio
-        results = await asyncio.gather(
-            *[self.mongo_repo.get_by_id(m) for m in ids],
-            return_exceptions=False,
-        )
-        return [c for c in results if c is not None]
 
     # ────────────────────────────────────────────────────────────────────────
     # 解析

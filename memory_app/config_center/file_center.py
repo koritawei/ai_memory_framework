@@ -8,7 +8,7 @@
 所有通用流程（resolve / write / history / notify / schema 校验）由
 :class:`BaseConfigCenter` 完成，本类**不重写**任何公共方法。
 
-文件结构（与 对齐）：
+文件结构（与设计文档 §2.8.7 对齐）：
 
 ```yaml
 defaults:           # 五级覆盖中的 default 层（嵌套 dict）
@@ -46,15 +46,6 @@ from .resolver import ConfigResolver
 logger = logging.getLogger(__name__)
 
 
-def _ensure_yaml_mapping(data: dict, key: str) -> dict:
-    """确保 YAML 顶层 key 为 dict；YAML 中 ``key: null`` 时 ``setdefault`` 无效。"""
-    section = data.get(key)
-    if not isinstance(section, dict):
-        section = {}
-        data[key] = section
-    return section
-
-
 def _flatten_defaults(defaults_root: dict, prefix: str = "") -> dict[str, Any]:
     """把嵌套 defaults 展开为 ``{dotted_category: entry_dict}``。
 
@@ -66,7 +57,7 @@ def _flatten_defaults(defaults_root: dict, prefix: str = "") -> dict[str, Any]:
 
        ::
 
-           # YAML 写法( 文档形态)
+           # YAML 写法(§2.8.4.1 文档形态)
            memory.prompts.episode_extraction:
              template: "..."
              variables: [text]
@@ -171,15 +162,11 @@ class FileConfigCenter(BaseConfigCenter):
             # 2. 回写 YAML(异步包装到线程池,不阻塞事件循环)
             data = await self._read_raw_async()
             if scope == "global":
-                _ensure_yaml_mapping(data, "global_overrides")[category] = entry
+                data.setdefault("global_overrides", {})[category] = entry
             elif scope == "tenant":
-                _ensure_yaml_mapping(data, "tenant_overrides").setdefault(scope_id, {})[
-                    category
-                ] = entry
+                data.setdefault("tenant_overrides", {}).setdefault(scope_id, {})[category] = entry
             elif scope == "user":
-                _ensure_yaml_mapping(data, "user_overrides").setdefault(scope_id, {})[
-                    category
-                ] = entry
+                data.setdefault("user_overrides", {}).setdefault(scope_id, {})[category] = entry
             await self._write_raw_async(data)
 
             # 3. 同步 mtime（避免下次轮询误判为外部变更）
@@ -291,8 +278,8 @@ class FileConfigCenter(BaseConfigCenter):
             yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
 
     # ── 异步包装:把同步磁盘 I/O 推到线程池,不阻塞事件循环 ───────────────
-    # _persist_entry 在 async 上下文里需要写盘;直接 open+safe_dump 会让
-    # 整个 BaseConfigCenter.write 持有的 asyncio.Lock 期间事件循环被磁盘
+    # _persist_entry 在 async 上下文里需要写盘;直接 open()+safe_dump() 会让
+    # 整个 BaseConfigCenter.write() 持有的 asyncio.Lock 期间事件循环被磁盘
     # I/O 卡住。慢盘 / NFS 抖动时其它 coroutine(健康检查、retrieve 等)挂起。
     async def _read_raw_async(self) -> dict:
         return await asyncio.to_thread(self._read_raw)
@@ -309,7 +296,7 @@ class FileConfigCenter(BaseConfigCenter):
                 await asyncio.sleep(self._poll_interval)
                 if not self._path.exists():
                     continue
-                mtime = await asyncio.to_thread(lambda: self._path.stat().st_mtime)
+                mtime = self._path.stat().st_mtime
                 if mtime > last:
                     await self._reload_from_disk_async()
                     last = mtime

@@ -1,4 +1,4 @@
-"""``composite`` —— 离线巩固 默认 Consolidator 插件。
+"""``composite`` —— Phase 6 Step 6.1 默认 Consolidator 插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -6,12 +6,12 @@
 :class:`memory_app.plugins.spi.consolidator.Consolidator` 的默认实现。
 内部委托 :class:`memory_app.consolidator.Consolidator` 算法,薄包装。
 
- 提到 composite 实际包含三层:
-1. 规则(Jaccard + Cosine) → 本插件 核心实现 实现
-2. Sheaf Cohomology      → 冷路径+ 启用(配置 ``enable_sheaf=true``)
-3. LLM 兜底              → 冷路径+ 启用(配置 ``enable_llm_fallback=true``)
+设计文档 §5.1.6.1 提到 composite 实际包含三层:
+1. 规则(Jaccard + Cosine) → 本插件 Phase 1 实现
+2. Sheaf Cohomology      → Phase 3+ 启用(配置 ``enable_sheaf=true``)
+3. LLM 兜底              → Phase 3+ 启用(配置 ``enable_llm_fallback=true``)
 
-离线巩固 仅落第 1 层;后两层留 hook 不强依赖。
+Phase 6 仅落第 1 层;后两层留 hook 不强依赖。
 """
 
 from __future__ import annotations
@@ -35,13 +35,13 @@ logger = logging.getLogger(__name__)
 
 @register
 class CompositeConsolidator(Consolidator):
-    """Composite Consolidator(离线巩固 默认)。"""
+    """Composite Consolidator(Phase 6 默认)。"""
 
     meta = PluginMeta(
         name="composite",
         category="memory.lifecycle.consolidator",
         version="1.0.0",
-        description="Jaccard + Cosine 综合相似度;核心实现 不含 Sheaf / LLM 兜底",
+        description="Jaccard + Cosine 综合相似度;Phase 1 不含 Sheaf / LLM 兜底",
         config_schema={
             "type": "object",
             "additionalProperties": True,

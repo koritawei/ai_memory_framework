@@ -1,4 +1,4 @@
-""" 验收：format_transfer 转换层。"""
+"""Step 1.3 验收：format_transfer 转换层。"""
 
 from __future__ import annotations
 

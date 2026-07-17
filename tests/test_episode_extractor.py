@@ -1,4 +1,4 @@
-"""EpisodeMemoryExtractor + LLMEpisodeExtractor 测试。"""
+"""EpisodeMemoryExtractor + LLMEpisodeExtractor 测试(Step 3.2)。"""
 
 from __future__ import annotations
 

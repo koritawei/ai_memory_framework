@@ -1,4 +1,4 @@
-"""Demo: 反馈与生命周期 反馈生命周期(``POST /v1/memory/feedback``)。
+"""Demo: Phase 5 反馈生命周期(``POST /v1/memory/feedback``)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 本 demo 走读
@@ -10,7 +10,7 @@
 
 两者都走"读旧 strength → 算新 strength → 落 Mongo"流程,关键不变量:
 
-1. ``Reinforcer.reinforce`` 算新强度,但**不**写入(写入由 Service 调
+1. ``Reinforcer.reinforce()`` 算新强度,但**不**写入(写入由 Service 调
    ``MongoRepo.atomic_apply_strength_delta`` 完成)
 2. ``atomic_apply_strength_delta`` 走 Mongo aggregation pipeline,**服务端**
    做 ``$min/$add`` —— 同一 cell 的并发反馈不会丢失更新
@@ -176,7 +176,7 @@ async def test_demo_concurrent_positive_feedbacks_no_lost_update(fake_mongo):
 
     # 3 次原子调用都被记下
     assert len(fake_mongo.atomic_calls) == 3
-    # update 那条不被走(走原子路径)
+    # update() 那条不被走(走原子路径)
     assert fake_mongo.updates == []
 
 
@@ -256,7 +256,7 @@ async def test_demo_feedback_falls_back_to_update_when_atomic_unavailable():
         async def get_by_id(self, mid):
             return self.store.get(mid)
 
-        async def update(self, mid, updates):
+        async def update(self, mid, updates, **_scope):
             self.updates.append((mid, dict(updates)))
             cell = self.store.get(mid)
             if cell is None:

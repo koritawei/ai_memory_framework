@@ -1,4 +1,4 @@
-"""``POST /v1/memory/ingest`` 写入契约。
+"""``POST /v1/memory/ingest`` 写入契约（设计文档 §3）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 三级嵌套：MemoryIngestRequest → HistorySession → ConversationTurn
@@ -8,7 +8,7 @@
 - **ConversationTurn**     单轮对话；role + content 为最小集合
 
 ═══════════════════════════════════════════════════════════════════════════════
-评测兼容
+评测兼容（设计文档 §3.6）
 ═══════════════════════════════════════════════════════════════════════════════
 - LongMemEval：原生兼容 ``haystack_sessions`` + ``has_answer`` 标注
 - LoCoMo：原生兼容 ``session_N`` + ``dia_id`` + ``speaker_a/b`` + 多媒体字段
@@ -39,7 +39,7 @@ class RoleEnum(str, Enum):
 class RawDataType(str, Enum):
     """输入数据大类。
 
-    当前版本仅承载 ``CONVERSATION``；后续支持 ``DOCUMENT`` / ``EVENT``。
+    Phase 1 仅承载 ``CONVERSATION``；后续支持 ``DOCUMENT`` / ``EVENT``。
     """
 
     CONVERSATION = "CONVERSATION"
@@ -51,7 +51,7 @@ class RawDataType(str, Enum):
 # 三级嵌套：Turn → Session → Request
 # ════════════════════════════════════════════════════════════════════════════
 class ConversationTurn(BaseModel):
-    """单轮对话。
+    """单轮对话（设计文档 §3.4）。
 
     最小必填集：``role`` + ``content``。其他字段为 LongMemEval / LoCoMo
     评测兼容字段，生产 API 调用方可全部省略。
@@ -84,7 +84,7 @@ class ConversationTurn(BaseModel):
 
 
 class HistorySession(BaseModel):
-    """单个历史会话。
+    """单个历史会话（设计文档 §3.3）。
 
     LoCoMo / LongMemEval 评测的"haystack session"或"session_N"。
     """
@@ -113,17 +113,17 @@ class HistorySession(BaseModel):
 
 
 class MemoryIngestRequest(BaseModel):
-    """写入请求。
+    """写入请求（设计文档 §3.2）。
 
     多租户隔离的根：``tenant_id`` + ``user_id`` 二者**必填**，缺一即
-    ``ValidationError``。这是 多租户隔离策略的强制契约。
+    ``ValidationError``。这是设计文档 §5.2.2 多租户隔离策略的强制契约。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     # ── 多租户隔离根（必填）──
-    tenant_id: str
-    user_id: str
+    tenant_id: str = Field(..., min_length=1, max_length=128)
+    user_id: str = Field(..., min_length=1, max_length=128)
 
     # ── 业务标识（可选）──
     session_id: str | None = None  # 当前 ingest 调用关联的会话 ID
@@ -145,7 +145,7 @@ class MemoryIngestRequest(BaseModel):
     metadata: dict | None = None
     extra: dict | None = None
 
-    # ──  准入门相关字段（写入热路径 写入热路径启用）──
+    # ── §12.1 准入门相关字段（Phase 2 写入热路径启用）──
     #: 客户端去重键；服务端用 Redis SETNX 24h 防止重复写入
     idempotency_key: str | None = None
 

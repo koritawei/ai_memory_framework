@@ -1,4 +1,4 @@
-"""CacheStore SPI —— 通用缓存。
+"""CacheStore SPI —— 通用缓存（设计文档 §5.1.3.9）。
 
 承载 SBD 状态、检索结果缓存、Cross-Encoder LRU 等横切场景。
 默认实现 ``redis_store``；测试可换 ``in_memory_cache``。

@@ -1,4 +1,4 @@
-"""RRF 融合 + 信号增强测试。"""
+"""RRF 融合 + 信号增强测试(Step 4.3)。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""ProfileExtractor SPI —— 用户画像抽取。
+"""ProfileExtractor SPI —— 用户画像抽取（设计文档 §5.1.5.12）。
 
 从 MemCell 簇中归纳跨会话稳定的用户特质（性格 / 价值观 / 工作习惯等）。
 默认实现按 :class:`ScenarioType` 在 group_chat / assistant 两类场景做差异化抽取。
@@ -29,7 +29,7 @@ class ProfileExtractor(Plugin):
         约定：
         - ``memcells`` 应来自同一聚类簇（由 ClusterManager 保证）
         - ``old_profile`` 非空时做增量合并（不要返回空集覆盖历史）
-        - 输出形态遵循 ProfileMemory 字段集
+        - 输出形态遵循设计文档 §4.5 ProfileMemory 字段集
         - 实现应在 ValueDiscriminator 判定为高价值的簇上才被调用
         """
 

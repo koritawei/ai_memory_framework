@@ -1,4 +1,4 @@
-"""QdrantVectorStore —— 第三方 VectorStore 示例(管理面)。
+"""QdrantVectorStore —— 第三方 VectorStore 示例(Phase 8 Step 8.4)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 关键点
@@ -7,7 +7,7 @@
 - 实现 ``memory_app.plugins.spi.vector_store.VectorStore`` 完整契约
 - ``meta.config_schema`` 暴露所有可调参数,经 :class:`PluginFactory` 校验后
   注入 ``start(config)``
-- 健康检查 ``health`` 反馈 collection 维度 / 数量等运维 metrics
+- 健康检查 ``health()`` 反馈 collection 维度 / 数量等运维 metrics
 
 ═══════════════════════════════════════════════════════════════════════════════
 为什么是进程内字典而不是真 Qdrant
@@ -46,7 +46,7 @@ class QdrantVectorStore(VectorStore):
         name="qdrant_store",
         category="memory.storage.vector",
         version="0.1.0",
-        description="第三方插件示例(管理面):进程内字典 + 余弦,真生产替换为 qdrant-client",
+        description="第三方插件示例(Phase 8.4):进程内字典 + 余弦,真生产替换为 qdrant-client",
         author="Memory Service Examples",
         config_schema={
             "type": "object",
@@ -149,7 +149,7 @@ class QdrantVectorStore(VectorStore):
         return deleted
 
     async def flush(self, collection: str) -> None:
-        # 进程内实现无需 flush;真 Qdrant 客户端转发到 collection.flush
+        # 进程内实现无需 flush;真 Qdrant 客户端转发到 collection.flush()
         return None
 
 

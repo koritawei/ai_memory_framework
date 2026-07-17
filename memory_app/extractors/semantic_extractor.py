@@ -1,4 +1,4 @@
-"""SemanticMemoryExtractor —— 从 EpisodicMemory 联想 SemanticMemory。
+"""SemanticMemoryExtractor —— 从 EpisodicMemory 联想 SemanticMemory(§5.1.6)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色

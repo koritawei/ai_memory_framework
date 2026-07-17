@@ -11,11 +11,11 @@
 
 阅读顺序建议:
 
-- ``test_demo_ingest_hot_path.py``       写入热路径
-- ``test_demo_cold_path.py``             冷路径（异步 LLM 抽取）
-- ``test_demo_retrieval_pipeline.py``    检索五阶段管线
-- ``test_demo_feedback_lifecycle.py``    反馈强化（突触可塑性）
-- ``test_demo_sleep_consolidation.py``   离线巩固（三种 ConsolidationDecision）
+- ``test_demo_ingest_hot_path.py``       Phase 2 写入热路径
+- ``test_demo_cold_path.py``             Phase 3 冷路径(异步 LLM 抽取)
+- ``test_demo_retrieval_pipeline.py``    Phase 4 五阶段检索
+- ``test_demo_feedback_lifecycle.py``    Phase 5 反馈强化(突触可塑性)
+- ``test_demo_sleep_consolidation.py``   Phase 6 离线巩固(三种 ConsolidationDecision)
 
 每个 demo 文件都是"线性脚本":没有 parametrize 花活,从输入构造到管线触发再到
 断言,阅读顺序与代码执行顺序一致。

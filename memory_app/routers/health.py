@@ -1,4 +1,4 @@
-"""健康检查端点。
+"""健康检查端点（设计文档 §2.5）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 两个端点
@@ -15,7 +15,7 @@
 - 严格模式（``strict_readiness=true``）：任意失败 → ``status=fail``
 
 degraded 而非 fail 的设计：让本服务在外部依赖暂时不可达时仍能启动并响应
-管理面调用，运维有时间介入排查 —— 与 服务降级策略一致。
+管理面调用，运维有时间介入排查 —— 与设计文档 §5.4 服务降级策略一致。
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ async def readiness():
     checks = await app_state.healthchecks()
     settings = app_state.settings
     strict = bool(settings and settings.strict_readiness)
-    must_ok = ("config_center", "plugin_registry")
+    must_ok = ("config_center", "plugin_registry", "core_services")
 
     must_failed = [k for k in must_ok if checks.get(k, {}).get("status") != "ok"]
     other_failed = [

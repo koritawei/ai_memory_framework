@@ -1,21 +1,21 @@
-"""反馈与生命周期 评分与强化公式。
+"""Phase 5 评分与强化公式(设计文档 §7.2 / §7.5)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 模块组织
 ═══════════════════════════════════════════════════════════════════════════════
 - :class:`ReinforceConfig` + :func:`compute_strength_delta`
-                        反馈强化公式(,)
+                        反馈强化公式(§7.5,Step 5.1)
 - :class:`FSFMConfig`  + :class:`FSFMScorer`
-                        FSFM 四维重要性评分(,)
+                        FSFM 四维重要性评分(§7.2,Step 5.3)
 - :class:`EbbinghausConfig` + :func:`ebbinghaus_retention`
-                        艾宾浩斯衰减(,辅助 ForgettingPolicy 默认实现)
+                        艾宾浩斯衰减(§7.3,辅助 ForgettingPolicy 默认实现)
 
 插件层 :mod:`memory_app.plugins_default.synaptic_reinforcer` /
 :mod:`memory_app.plugins_default.fsfm_scorer` /
 :mod:`memory_app.plugins_default.ebbinghaus_policy` 是这些核心算法的薄包装。
 
 ═══════════════════════════════════════════════════════════════════════════════
-反馈 → strength 增量
+反馈 → strength 增量(设计文档 §7.5 / SPI Reinforcer 表)
 ═══════════════════════════════════════════════════════════════════════════════
 ::
 
@@ -62,7 +62,7 @@ def _default_feedback_signals() -> dict[FeedbackType, float]:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# :反馈强化
+# Step 5.1:反馈强化
 # ════════════════════════════════════════════════════════════════════════════
 @dataclass
 class ReinforceConfig:
@@ -138,14 +138,14 @@ def compute_strength_delta(
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# :FSFM 四维重要性
+# Step 5.3:FSFM 四维重要性
 # ════════════════════════════════════════════════════════════════════════════
 @dataclass
 class FSFMConfig:
     """FSFM 权重 / 半衰期。
 
-     标注的子分数定域(CQA/BVE [0,3], TRS [0,2], SRC [-10,0])使
-    composite 落在 [-1.5, 2.25]; 的简化版把所有子分归一到 [0, 1]
+    设计文档 §7.2 标注的子分数定域(CQA/BVE [0,3], TRS [0,2], SRC [-10,0])使
+    composite 落在 [-1.5, 2.25];Step 5.3 的简化版把所有子分归一到 [0, 1]
     并用线性加权,落在 [0, 1] —— 便于 RetrievalPipeline 的信号增强直接消费。
     """
 
@@ -188,8 +188,8 @@ class FSFMScorer:
     def detail(self, cell: MemCell, now: datetime | None = None) -> dict[str, float]:
         """返回各维度子分;便于排查与离线分析。
 
-        旧实现复用 ``score(cell)`` 让 cqa/bve/trs/src 各算两次;反馈与生命周期 反馈与
-        离线巩固 巩固高频路径直接调 ``detail``,double computation 实测占可观 CPU。
+        旧实现复用 ``score(cell)`` 让 cqa/bve/trs/src 各算两次;Phase 5 反馈与
+        Phase 6 巩固高频路径直接调 ``detail``,double computation 实测占可观 CPU。
         现在 4 个子分各算 1 次,composite 复用本地变量。
         """
         n = now or _utcnow()
@@ -206,7 +206,7 @@ class FSFMScorer:
         }
 
     def _composite(self, cqa: float, bve: float, trs: float, src: float) -> float:
-        """加权综合 4 子分。提取为方法让 score / detail 共用同一算式。"""
+        """加权综合 4 子分。提取为方法让 score() / detail() 共用同一算式。"""
         return round(
             self.config.w_cqa * cqa
             + self.config.w_bve * bve

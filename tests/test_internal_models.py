@@ -1,4 +1,4 @@
-""" 验收：内部数据模型。"""
+"""Step 1.2 验收：内部数据模型。"""
 
 from __future__ import annotations
 

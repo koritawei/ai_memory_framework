@@ -1,4 +1,4 @@
-"""``three_phase_dreaming`` —— 默认 ConsolidationStrategy（离线巩固）。
+"""``three_phase_dreaming`` —— Phase 6 Step 6.2/6.3 默认 ConsolidationStrategy。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -18,7 +18,7 @@
 - ``bind_pipeline_components(...)`` 由 ``deps._init_consolidation_service`` 调,
   注入 SleepConsolidator / DecayManager / 当前 tenant_id+user_id 提供器
 - 任意环节抛 → 仅记 ``ConsolidationReport.error_count``,不阻止其他阶段
-- ``run(scope)`` 不持锁（当前简化实现）；生产环境可启用 Redis 分布式锁
+- ``run(scope)`` 不持锁(Phase 6 简化);Phase 7+ 启用 Redis 分布式锁
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ ScenesProvider = Callable[[str, str], Awaitable[list]]
 
 @register
 class ThreePhaseDreamingStrategy(ConsolidationStrategy):
-    """三相睡眠巩固策略（离线巩固默认实现）。"""
+    """三相睡眠巩固策略(Phase 6 默认)。"""
 
     meta = PluginMeta(
         name="three_phase",
@@ -136,7 +136,7 @@ class ThreePhaseDreamingStrategy(ConsolidationStrategy):
 
         :param scenes_provider:  ``async(tenant_id, user_id) -> list[MemScene]``,
                                  返回该用户当前的成熟 MemScene
-        :param scope_provider:   ``async -> list[(tenant_id, user_id)]``,
+        :param scope_provider:   ``async() -> list[(tenant_id, user_id)]``,
                                  返回本次巩固扫描的所有 (tenant, user) 对
         """
         self._sleep = sleep
@@ -236,7 +236,7 @@ class ThreePhaseDreamingStrategy(ConsolidationStrategy):
         if scope in ("light", "deep", "rem"):
             return scope  # type: ignore[return-value]
         t = time or _utcnow()
-        # 周日 = weekday == 6
+        # 周日 = weekday() == 6
         if t.weekday() == 6 and 5 <= t.hour < 7:
             return "rem"
         if 3 <= t.hour < 5:

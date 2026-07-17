@@ -1,4 +1,4 @@
-"""KVStore SPI —— 键值/文档存储。
+"""KVStore SPI —— 键值/文档存储（设计文档 §5.2）。
 
 主存储抽象，承载所有持久化记忆体（MemCell / EpisodicMemory / SemanticMemory）。
 默认实现 ``mongo_store``；可换 ``pg_store`` / ``sqlite_store``。
@@ -52,7 +52,7 @@ class KVStore(Plugin):
         """Compare-And-Swap：``expected=None`` 表示仅当不存在时创建。
 
         约定：返回 True 表示 CAS 成功；返回 False 表示 expected 不匹配（被并发修改）。
-        是实现上 写入热路径 写入幂等 + 巩固阶段乐观锁的基础原语。
+        是实现上 Phase 2 写入幂等 + 巩固阶段乐观锁的基础原语。
         """
 
     @abstractmethod

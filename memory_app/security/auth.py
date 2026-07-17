@@ -24,6 +24,8 @@ from typing import Annotated
 from fastapi import Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from memory_app.settings import Settings
+
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -34,8 +36,8 @@ def verify_secret(provided: str | None, expected: str | None) -> bool:
     return secrets.compare_digest(provided, expected)
 
 
-def _settings_or_none():
-    from memory_app.deps.state import app_state
+def _settings_or_none() -> Settings | None:
+    from memory_app.deps import app_state
 
     return app_state.settings
 
@@ -50,7 +52,10 @@ def check_admin_key(x_admin_key: str | None) -> None:
     """
     settings = _settings_or_none()
     if settings is None:
-        return
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="service not ready",
+        )
     expected = settings.admin_api_key
     if expected is not None:
         if not verify_secret(x_admin_key, expected):
@@ -65,46 +70,33 @@ def check_admin_key(x_admin_key: str | None) -> None:
 def check_api_key(credentials: HTTPAuthorizationCredentials | None) -> None:
     """校验业务面 ``Authorization: Bearer`` 令牌。
 
-    接受三类凭证（满足其一即可）：
-    - 全局 ``Settings.api_key``
-    - ``Settings.api_key_bindings`` 中登记的租户绑定密钥
-    - JWT（形如 ``xxx.yyy.zzz`` 且配置了 ``jwt_secret``，具体 claim 由
-      :func:`memory_app.security.identity.resolve_identity` 解析）
-
     :raises HTTPException: 401/403 当鉴权失败
     """
     settings = _settings_or_none()
     if settings is None:
-        return
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="service not ready",
+        )
     if not settings.auth_enabled:
         return
+    expected = settings.api_key
+    if expected is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, detail="api_key not configured"
+        )
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             detail="missing or invalid Authorization header",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = credentials.credentials
-    if settings.api_key and verify_secret(token, settings.api_key):
-        return
-    if token in (settings.api_key_bindings or {}):
-        return
-    if settings.jwt_secret and token.count(".") == 2:
-        return
-
-    if (
-        not settings.api_key
-        and not settings.api_key_bindings
-        and not settings.jwt_secret
-    ):
+    if not verify_secret(credentials.credentials, expected):
         raise HTTPException(
-            status.HTTP_403_FORBIDDEN, detail="api_key not configured"
+            status.HTTP_401_UNAUTHORIZED,
+            detail="invalid API key",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    raise HTTPException(
-        status.HTTP_401_UNAUTHORIZED,
-        detail="invalid API key",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
 
 
 async def require_admin_auth(

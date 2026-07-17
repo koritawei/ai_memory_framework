@@ -1,14 +1,15 @@
-"""外部 ``MemoryIngestRequest`` → 内部 ``RawData`` 列表的转换层。
+"""外部 ``MemoryIngestRequest`` → 内部 ``RawData`` 列表的转换层
+（设计文档 §3.5 输入层与内部管线映射 / §4.14 format_transfer）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 两种粒度
 ═══════════════════════════════════════════════════════════════════════════════
 - :func:`ingest_to_raw_data_list`           一个 HistorySession → 一个 RawData
-                                            （session 粒度，默认）
+                                            （Vibe Coding Step 1.3 默认）
 - :func:`ingest_to_raw_data_list_per_turn`  一个 ConversationTurn → 一个 RawData
-                                            （turn 粒度，EverMemOS 风格）
+                                            （对齐 §4.14 EverMemOS 风格）
 
-写入热路径默认使用 session 粒度；如需细粒度切边界，可在
+Phase 2 写入热路径默认使用 session 粒度；如需细粒度切边界，可在
 SBD 阶段切到 turn 粒度。
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -42,13 +43,13 @@ from memory_app.schemas.ingest import (
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 默认：session 粒度
+# 默认：session 粒度（Vibe Coding 默认）
 # ════════════════════════════════════════════════════════════════════════════
 def ingest_to_raw_data_list(request: MemoryIngestRequest) -> list[RawData]:
     """每个 :class:`HistorySession` 生成一个 :class:`RawData`。
 
     每 session 的 turns 按 ``role: content`` 格式拼为多行文本。
-    适用于：SBD 在 session 边界天然切片的场景（写入热路径默认）。
+    适用于：SBD 在 session 边界天然切片的场景（Phase 2 默认）。
 
     :returns: ``list[RawData]``，长度等于 ``request.history_sessions`` 长度
     """
@@ -75,13 +76,13 @@ def ingest_to_raw_data_list(request: MemoryIngestRequest) -> list[RawData]:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 进阶：turn 粒度（对齐 ）
+# 进阶：turn 粒度（对齐 §4.14）
 # ════════════════════════════════════════════════════════════════════════════
 def ingest_to_raw_data_list_per_turn(request: MemoryIngestRequest) -> list[RawData]:
     """每个 :class:`ConversationTurn` 生成一个 :class:`RawData`。
 
     每条 RawData 仅承载单轮原文。适用于：
-    - SBD 在 turn 级做细粒度边界检测（ EverMemOS 风格）
+    - SBD 在 turn 级做细粒度边界检测（§4.14 EverMemOS 风格）
     - 评测时需要精确到 dia_id 级溯源（LoCoMo）
 
     :returns: ``list[RawData]``，长度等于所有 ``turns`` 累加

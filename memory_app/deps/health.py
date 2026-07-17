@@ -42,7 +42,22 @@ class HealthAggregator:
             "status": "ok",
             "detail": f"categories={len(plugin_registry.categories())}",
         }
+        out["core_services"] = self._check_core_services()
         return out
+
+    def _check_core_services(self) -> dict:
+        """核心业务能力是否装配（ingest / retrieval）。"""
+        missing: list[str] = []
+        if self._state.ingest_service is None:
+            missing.append("ingest_service")
+        if self._state.retrieval_orchestrator is None:
+            missing.append("retrieval_orchestrator")
+        if missing:
+            return {
+                "status": "fail",
+                "detail": f"missing: {', '.join(missing)}",
+            }
+        return {"status": "ok", "detail": "ingest+retrieval ready"}
 
     # ────────────────────────────────────────────────────────────────────────
     # 子项

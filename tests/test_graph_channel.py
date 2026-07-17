@@ -1,4 +1,4 @@
-"""GraphChannel + graph_traversal 插件测试。"""
+"""GraphChannel + graph_traversal 插件测试(Step 7.4)。"""
 
 from __future__ import annotations
 

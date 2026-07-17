@@ -1,4 +1,4 @@
-"""``incremental_centroid`` —— 增量质心聚类插件（冷路径）。
+"""``incremental_centroid`` —— Phase 3 Step 3.4 增量质心聚类插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -12,8 +12,8 @@
 ═══════════════════════════════════════════════════════════════════════════════
 为什么 scenes 索引在内存
 ═══════════════════════════════════════════════════════════════════════════════
-- 当前简化：实例每个 group_id 维护一个滑动窗口的 scenes（LRU 上限 256）
-- 进程重启后从 KVStore 拉回（离线巩固启用后）；本插件**不**在 start 内做加载
+- Phase 3 简化:实例每个 group_id 维护一个滑动窗口的 scenes(LRU 上限 256)
+- 进程重启后从 KVStore 拉回(Phase 6+);本插件**不**在 start 内做加载
 - 高 QPS 场景考虑切到 Redis sorted set / 持久化 collection
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -24,7 +24,7 @@
     similarity_threshold: float 默认 0.65
     time_gap_days:        float 默认 7
     max_scene_size:       int   默认 50
-    max_scenes_per_group: int   默认 256  (LRU 上限，当前简化实现)
+    max_scenes_per_group: int   默认 256  (LRU 上限,Phase 3 简化)
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ class IncrementalCentroidClusterer(Clusterer):
         # group_key → OrderedDict[scene_id, MemScene]   (LRU 顺序)
         self._scenes_by_group: dict[str, "OrderedDict[str, MemScene]"] = {}
         # 每 group_key 一把锁:串行化"读 existing → 决策 → 写 bucket"。
-        # 否则两个并发 cluster 都看到同一份 existing,都决定新建 scene,
+        # 否则两个并发 cluster() 都看到同一份 existing,都决定新建 scene,
         # 同一时刻同一 group_key 的 scene 数翻倍,聚类不变量被破坏。
         # 用 OrderedDict 实现 LRU,防止高基数租户/group 让锁数无限增长。
         self._group_locks: "OrderedDict[str, asyncio.Lock]" = OrderedDict()

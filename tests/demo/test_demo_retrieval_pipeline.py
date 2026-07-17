@@ -1,4 +1,4 @@
-"""Demo: 检索 检索五阶段管线(``POST /v1/memory/retrieve``)。
+"""Demo: Phase 4 检索五阶段管线(``POST /v1/memory/retrieve``)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 本 demo 走读
@@ -192,7 +192,7 @@ async def test_demo_threshold_filter_drops_low_score_candidates():
 async def test_demo_enabled_channels_restricts_recall():
     """``RetrievalConfig.enabled_channels=["bm25"]`` 应只调 bm25,跳过 vector。
 
-    这是 五级覆盖中的 request 层 —— 客户端可临时关闭某通道。
+    这是设计文档 §2.8 五级覆盖中的 request 层 —— 客户端可临时关闭某通道。
     """
     from memory_app.schemas.retrieve import RetrievalConfig
 
@@ -224,7 +224,7 @@ async def test_demo_enabled_channels_restricts_recall():
 @pytest.mark.asyncio
 async def test_demo_all_channels_failed_raises_retryable_plugin_error():
     """所有通道都抛错 → RecallStage 抛 PluginError(retryable),
-    让上层 HTTP 层映射为 503 + Retry-After。这是 的关键不变量。"""
+    让上层 HTTP 层映射为 503 + Retry-After。这是设计文档 §5.4 的关键不变量。"""
 
     class _BoomChannel:
         def __init__(self, name: str) -> None:

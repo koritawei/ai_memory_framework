@@ -1,4 +1,4 @@
-"""LifecycleUpdater —— 检索命中后生命周期轻量更新。
+"""LifecycleUpdater —— 检索命中后生命周期轻量更新(设计文档 §6.6)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -10,14 +10,14 @@
 - ``updated_at``     置为当前时刻
 
 **设计铁律**:
-- 只更新 MongoDB(SOT);ES / Milvus 由 Reconciler(离线巩固+)对齐
+- 只更新 MongoDB(SOT);ES / Milvus 由 Reconciler(Phase 6+)对齐
 - fire-and-forget:经 :class:`BackgroundTaskRunner` 提交,失败入 DLQ
 - 与 :class:`Reinforcer` SPI 是**互补**关系:
   - Reinforcer:用户**显式**反馈 → 大幅 +/- strength
   - LifecycleUpdater:用户**隐式**命中 → 微量 +0.1
 
 ═══════════════════════════════════════════════════════════════════════════════
-状态转换矩阵
+状态转换矩阵(§7.1.3)
 ═══════════════════════════════════════════════════════════════════════════════
 ::
 
@@ -26,7 +26,7 @@
     COLD    access_count >= 0  且  age <  90d
     ARCHIVED 否则
 
-注:实际 反馈与生命周期 的 MemoryState 枚举只有 ACTIVE/WARM/COLD/ARCHIVED,
+注:实际 Phase 5 的 MemoryState 枚举只有 ACTIVE/WARM/COLD/ARCHIVED,
 "HOT" 映射为 ACTIVE(高频活跃)。
 """
 
@@ -38,6 +38,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from memory_app.internal_models import MemoryState
+from memory_app.repositories.scope import tenant_scope_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,13 @@ class LifecycleUpdater:
     # ────────────────────────────────────────────────────────────────────────
     # 提交
     # ────────────────────────────────────────────────────────────────────────
-    def on_retrieval_hit(self, mem_cell_ids: list[str]) -> None:
+    def on_retrieval_hit(
+        self,
+        mem_cell_ids: list[str],
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
         """火并忘提交。
 
         路径选择:
@@ -123,17 +130,25 @@ class LifecycleUpdater:
             return
         self._submitted += len(mem_cell_ids)
         if hasattr(self._mongo_repo, "bulk_increment_access"):
-            self._submit_bulk(list(mem_cell_ids))
+            self._submit_bulk(list(mem_cell_ids), tenant_id=tenant_id, user_id=user_id)
             return
         # fallback:逐条单独提交
         for mid in mem_cell_ids:
-            self._submit_one(mid)
+            self._submit_one(mid, tenant_id=tenant_id, user_id=user_id)
 
-    def _submit_bulk(self, mem_cell_ids: list[str]) -> None:
+    def _submit_bulk(
+        self,
+        mem_cell_ids: list[str],
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
         """提交一个 batched 任务把所有 id 一次 update_many。"""
         if self._runner is not None:
             async def _factory():
-                await self._update_bulk(mem_cell_ids)
+                await self._update_bulk(
+                    mem_cell_ids, tenant_id=tenant_id, user_id=user_id
+                )
 
             self._runner.submit(
                 _factory,
@@ -151,28 +166,41 @@ class LifecycleUpdater:
             asyncio.get_running_loop()
         except RuntimeError:
             return
-        task = asyncio.create_task(self._update_bulk(mem_cell_ids))
+        task = asyncio.create_task(
+            self._update_bulk(mem_cell_ids, tenant_id=tenant_id, user_id=user_id)
+        )
         self._inflight.add(task)
         task.add_done_callback(self._inflight.discard)
 
-    async def _update_bulk(self, mem_cell_ids: list[str]) -> None:
-        """单次 Mongo update_many;失败仅 warn 不抛(背景任务语义)。"""
-        try:
-            affected = await self._mongo_repo.bulk_increment_access(
-                mem_cell_ids,
-                strength_delta=self._strength_delta,
-                s_max=self._s_max,
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.warning("lifecycle bulk update failed: %s", e)
-            return
+    async def _update_bulk(
+        self,
+        mem_cell_ids: list[str],
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        """单次 Mongo update_many;失败向上抛以便 BackgroundTaskRunner 重试/DLQ。"""
+        affected = await self._mongo_repo.bulk_increment_access(
+            mem_cell_ids,
+            strength_delta=self._strength_delta,
+            s_max=self._s_max,
+            **tenant_scope_kwargs(tenant_id, user_id),
+        )
         self._completed += int(affected if affected is not None else len(mem_cell_ids))
 
-    def _submit_one(self, mem_cell_id: str) -> None:
+    def _submit_one(
+        self,
+        mem_cell_id: str,
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
         if self._runner is not None:
             # 用 BackgroundTaskRunner(带重试 + DLQ)
             async def _factory():
-                await self._update_single(mem_cell_id)
+                await self._update_single(
+                    mem_cell_id, tenant_id=tenant_id, user_id=user_id
+                )
 
             self._runner.submit(
                 _factory,
@@ -190,14 +218,22 @@ class LifecycleUpdater:
             asyncio.get_running_loop()
         except RuntimeError:
             return
-        task = asyncio.create_task(self._update_single(mem_cell_id))
+        task = asyncio.create_task(
+            self._update_single(mem_cell_id, tenant_id=tenant_id, user_id=user_id)
+        )
         self._inflight.add(task)
         task.add_done_callback(self._inflight.discard)
 
     # ────────────────────────────────────────────────────────────────────────
     # 同步更新单条(可被 BackgroundTaskRunner 重试)
     # ────────────────────────────────────────────────────────────────────────
-    async def _update_single(self, mem_cell_id: str) -> dict[str, Any] | None:
+    async def _update_single(
+        self,
+        mem_cell_id: str,
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any] | None:
         # 优先用原子化 update_pipeline,避免 read-modify-write 并发丢失:
         # 同一 cell 两次命中都 +1,旧实现 get→inc→set 串行执行可能只生效一次。
         atomic_fn = getattr(self._mongo_repo, "atomic_apply_strength_delta", None)
@@ -207,6 +243,7 @@ class LifecycleUpdater:
                 delta=self._strength_delta,
                 s_max=self._s_max,
                 increment_access=True,
+                **tenant_scope_kwargs(tenant_id, user_id),
             )
             if applied is None:
                 logger.debug("lifecycle update skipped (not found): %s", mem_cell_id)
@@ -222,6 +259,15 @@ class LifecycleUpdater:
         if cell is None:
             logger.debug("lifecycle update skipped (not found): %s", mem_cell_id)
             return None
+        scope = tenant_scope_kwargs(tenant_id, user_id)
+        if scope and (
+            cell.tenant_id != scope["tenant_id"]
+            or cell.user_id != scope["user_id"]
+        ):
+            logger.debug(
+                "lifecycle update skipped (tenant mismatch): %s", mem_cell_id
+            )
+            return None
         new_strength = min(self._s_max, float(cell.strength) + self._strength_delta)
         new_access = int(cell.access_count) + 1
         new_state = compute_state(
@@ -233,15 +279,28 @@ class LifecycleUpdater:
             "state": new_state.value,
             "updated_at": _utcnow(),
         }
-        await self._mongo_repo.update(mem_cell_id, updates)
+        ok = await self._mongo_repo.update(
+            mem_cell_id, updates, **tenant_scope_kwargs(tenant_id, user_id)
+        )
+        if not ok:
+            logger.debug("lifecycle update skipped (no match): %s", mem_cell_id)
+            return None
         self._completed += 1
         return updates
 
     # ────────────────────────────────────────────────────────────────────────
     # 同步入口(评测 / 测试)
     # ────────────────────────────────────────────────────────────────────────
-    async def update_now(self, mem_cell_id: str) -> dict[str, Any] | None:
-        return await self._update_single(mem_cell_id)
+    async def update_now(
+        self,
+        mem_cell_id: str,
+        *,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        return await self._update_single(
+            mem_cell_id, tenant_id=tenant_id, user_id=user_id
+        )
 
     # ────────────────────────────────────────────────────────────────────────
     # 监控

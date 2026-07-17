@@ -1,4 +1,4 @@
-"""``weighted_rrf`` —— 检索 RRF 融合插件。
+"""``weighted_rrf`` —— Phase 4 Step 4.3 RRF 融合插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -30,13 +30,13 @@ logger = logging.getLogger(__name__)
 
 @register
 class WeightedRRFFuser(Fuser):
-    """加权 RRF 融合插件(检索 默认)。"""
+    """加权 RRF 融合插件(Phase 4 默认)。"""
 
     meta = PluginMeta(
         name="weighted_rrf",
         category="memory.retrieval.fuser",
         version="1.0.0",
-        description="加权 Reciprocal Rank Fusion",
+        description="加权 Reciprocal Rank Fusion(§6.1.2)",
         config_schema={
             "type": "object",
             "additionalProperties": True,

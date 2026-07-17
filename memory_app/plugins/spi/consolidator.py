@@ -1,4 +1,4 @@
-"""Consolidator SPI —— 语义事实冲突消解四操作。
+"""Consolidator SPI —— 语义事实冲突消解四操作（设计文档 §5.1.6.1）。
 
 默认实现 ``composite_consolidator`` = 规则 + Sheaf Cohomology + LLM 兜底。
 四操作决策：ADD / UPDATE / SUPERSEDE / NOOP。
@@ -16,7 +16,7 @@ from memory_app.plugins.base import Plugin
 
 
 class ConsolidationDecision(str, Enum):
-    """消解决策。"""
+    """消解决策（设计文档 §5.1.6.1）。"""
 
     ADD = "ADD"            # 新事实，无冲突 → 直接存储
     UPDATE = "UPDATE"      # 高相似 + 信息互补 → 合并

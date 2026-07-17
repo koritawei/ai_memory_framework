@@ -16,7 +16,7 @@ from memory_app.config_center import (
 
 
 class _FakeCursor:
-    """支持 ``async for`` 与 ``.sort.limit``。"""
+    """支持 ``async for`` 与 ``.sort().limit()``。"""
 
     def __init__(self, docs: list[dict]):
         self._docs = list(docs)

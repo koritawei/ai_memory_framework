@@ -1,4 +1,4 @@
-"""DLQStore SPI —— Dead-Letter Queue。
+"""DLQStore SPI —— Dead-Letter Queue（设计文档 §12.9）。
 
 ES / Milvus / Entity Store 等异步派生索引写入失败时，记录入 DLQ；
 :class:`MemorySyncReconciler` 定时扫描重试。
@@ -43,7 +43,7 @@ class DLQStore(Plugin):
 
     @abstractmethod
     async def dequeue_due(self, limit: int = 100) -> list[DLQRecord]:
-        """拉取所有 ``next_retry_at <= now`` 的记录。
+        """拉取所有 ``next_retry_at <= now()`` 的记录。
 
         约定：实现应做"租约"机制 —— 拉取后该记录在短时间内（如 5 min）不会被
         再次拉取，避免多副本 reconciler 同时重试。

@@ -1,4 +1,4 @@
-"""BasePipeline / PipelineStage 抽象。
+"""BasePipeline / PipelineStage 抽象(设计文档 §2.7.6.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 为什么需要管线抽象
@@ -14,8 +14,8 @@
 契约
 ═══════════════════════════════════════════════════════════════════════════════
 - ``Stage.run(ctx) -> ctx``     单阶段;**约定原地修改并返回同一 ctx**(便于追踪)
-- ``Pipeline.stages``          子类声明阶段顺序
-- ``Pipeline.build_context``   子类把 input 包装为 ctx
+- ``Pipeline.stages()``          子类声明阶段顺序
+- ``Pipeline.build_context()``   子类把 input 包装为 ctx
 - ``Pipeline.finalize(ctx)``     子类把 ctx 折叠为对外返回值
 - ``Pipeline.should_skip_stage`` 子类可基于 ctx 决定是否跳过某 Stage
 """
@@ -74,7 +74,7 @@ class BasePipeline(ABC, Generic[InT, OutT, CtxT]):
 
         execute(input)
           ├── build_context(input)        子类实现
-          ├── for stage in stages:
+          ├── for stage in stages():
           │     if should_skip_stage(stage, ctx): continue
           │     ctx = await stage.run(ctx)
           └── finalize(ctx)               子类实现 → 返回 OutT

@@ -1,4 +1,4 @@
-"""``ebbinghaus_v1`` —— 反馈与生命周期 默认 ForgettingPolicy。
+"""``ebbinghaus_v1`` —— Phase 5 默认 ForgettingPolicy。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -6,7 +6,7 @@
 :class:`memory_app.plugins.spi.forgetting_policy.ForgettingPolicy` 的默认实现。
 内部用 :func:`memory_app.scoring.ebbinghaus_retention` 算保留度。
 
-写入热路径+ 启用 Langevin SDE 时切到 ``langevin_sde`` 插件,业务代码零改动。
+Phase 2+ 启用 Langevin SDE 时切到 ``langevin_sde`` 插件,业务代码零改动。
 
 ═══════════════════════════════════════════════════════════════════════════════
 配置
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class EbbinghausPolicy(ForgettingPolicy):
-    """艾宾浩斯简单衰减(反馈与生命周期 默认)。"""
+    """艾宾浩斯简单衰减(Phase 5 默认)。"""
 
     meta = PluginMeta(
         name="ebbinghaus_v1",
@@ -100,7 +100,7 @@ class EbbinghausPolicy(ForgettingPolicy):
     async def step(
         self, memories: list[MemoryRef], dt_seconds: float
     ) -> list[MemoryRef]:
-        """核心实现 简化:不做位置演化,仅按 dt_seconds 在 ``last_recalled_at``
+        """Phase 1 简化:不做位置演化,仅按 dt_seconds 在 ``last_recalled_at``
         基础上做一步衰减(等价 retention_score 的离线版本,不修改 strength)。
 
         约定:返回**新列表**(不改入参)。

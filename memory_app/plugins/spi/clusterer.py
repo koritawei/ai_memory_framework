@@ -1,4 +1,4 @@
-"""Clusterer SPI —— MemScene 增量聚类。
+"""Clusterer SPI —— MemScene 增量聚类（设计文档 §5.1.5.4）。
 
 默认实现 ``incremental_centroid``：质心法 + 余弦相似度 + 时间窗。
 """

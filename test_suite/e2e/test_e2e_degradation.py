@@ -1,4 +1,4 @@
-"""降级演练 E2E（设计  / 方案 ）。"""
+"""降级演练 E2E（设计 §5.4 / 方案 §6.6）。"""
 
 from __future__ import annotations
 

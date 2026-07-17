@@ -1,4 +1,4 @@
-"""Consolidator —— 语义事实冲突消解。
+"""Consolidator —— 语义事实冲突消解(设计文档 §5.1.6.1 / §7.4)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 四操作决策
@@ -19,7 +19,7 @@
 
     composite_sim = w_jaccard × Jaccard(entities) + w_cos × Cosine(embedding)
 
-- 核心实现 简化:embedding 不存时退化到 ``Jaccard(chars(content))``
+- Phase 1 简化:embedding 不存时退化到 ``Jaccard(chars(content))``
 - 实体集合不存时退化到 ``Jaccard(set(content_a) , set(content_b))``
 """
 
@@ -212,7 +212,7 @@ class Consolidator:
     def _tokens(mem: SemanticMemory) -> list[str]:
         """优先用 entities;退化到 content 字符级 token。
 
-        SemanticMemory 没有显式 ``entities`` 字段;离线巩固 简化:把 content
+        SemanticMemory 没有显式 ``entities`` 字段;Phase 6 简化:把 content
         的每个非空白字符视作 token。汉字 + ASCII 都按字符切。
         """
         text = (mem.content or "").strip()

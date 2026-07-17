@@ -189,4 +189,4 @@ class BackgroundTaskRunner:
         }
 
 
-__all__ = ["BackgroundTaskRunner", "RetryPolicy"]
+__all__ = ["BackgroundTaskRunner", "RetryPolicy", "DLQRecord"]

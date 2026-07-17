@@ -1,9 +1,9 @@
-"""RetrievalFilter SPI —— 检索过滤。
+"""RetrievalFilter SPI —— 检索过滤（设计文档 §6.4）。
 
 链式调用：threshold → lifecycle → quota。
 默认实现：
 - ``threshold_filter``  剔除 score < 0.55 的候选
-- ``lifecycle_filter``  剔除 ``ARCHIVED`` 状态的记忆（写入热路径+）
+- ``lifecycle_filter``  剔除 ``ARCHIVED`` 状态的记忆（Phase 2+）
 - ``quota_filter``      按查询意图调整情景/语义比例
 """
 

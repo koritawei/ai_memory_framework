@@ -9,7 +9,7 @@ test_suite/
 ├── README.md
 ├── conftest.py          # 共用 fixture（项目根、隔离配置、TestClient）
 ├── fixtures/            # 测试样本数据
-├── e2e/                 # 端到端 / 流程级用例（对应方案 ）
+├── e2e/                 # 端到端 / 流程级用例（对应方案 §6）
 ├── gates/               # CI 门禁（审计等）
 ├── runner.py            # 统一执行器 + 报告生成
 └── reports/             # 运行产物（JUnit XML、报告 Markdown）
@@ -42,4 +42,4 @@ uv run pytest test_suite/nft -m nft -v
 | 单元/组件/API | `memory/tests/` | 747+ 用例，日常开发回归 |
 | 集成降级 | `memory/tests/integration/` | `@pytest.mark.integration` |
 | 契约 | `memory/tests/contract/` | SPI 等价性 |
-| **方案 E2E / 门禁编排** | `memory/test_suite/` | 按测试方案 – 编排执行并出报告 |
+| **方案 E2E / 门禁编排** | `memory/test_suite/` | 按测试方案 §6–§10 编排执行并出报告 |

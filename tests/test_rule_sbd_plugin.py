@@ -1,4 +1,4 @@
-"""``RuleSBD`` 插件 SPI 契约测试。"""
+"""``RuleSBD`` 插件 SPI 契约测试(Step 2.1)。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""五级覆盖与灰度匹配。
+"""五级覆盖与灰度匹配（设计文档 §2.8.2 / §2.8.4）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 本模块只承载"纯函数 / 无状态"的解析逻辑
@@ -93,29 +93,6 @@ def _match_traffic_pct(pct: float | int | None, user_id: str | None) -> bool:
     # 调用都拿到不同微秒数,等效随机分桶,失去稳定路由语义)。
     seed = utcnow().strftime("%Y%m%d%H%M")
     return _user_hash_bucket(seed, 10000) < pct_val * 100
-
-
-def compute_cache_user_key(
-    *,
-    user_id: Optional[str],
-    source: str,
-    variant_user_scoped: bool,
-) -> str:
-    """决定 PluginFactory 实例缓存是否按 user 隔离。"""
-    if not user_id:
-        return "*"
-    if source == "user":
-        return user_id
-    if variant_user_scoped:
-        return user_id
-    return "*"
-
-
-def _variant_match_is_user_scoped(match: dict[str, Any], user_id: Optional[str]) -> bool:
-    """灰度规则是否依赖 user_id（同 tenant 不同 user 可能得到不同插件）。"""
-    if not user_id:
-        return False
-    return any(k in match for k in ("user_id_hash_mod_100_lt", "traffic_pct"))
 
 
 def _match_gray_rule(
@@ -265,7 +242,7 @@ class ConfigResolver:
               ]
             }
 
-        Prompt 简化语法糖 variant也被支持 —— variant 顶层带 prompt body
+        Prompt 简化语法糖 variant(§2.8.4.1)也被支持 —— variant 顶层带 prompt body
         字段(``template`` / ``variables`` 等)时自动包装到 ``params``::
 
             variants:
@@ -298,9 +275,6 @@ class ConfigResolver:
                 if v_params:
                     merged["params"] = _deep_merge(merged.get("params", {}), v_params)
                 merged["_variant_matched"] = True
-                merged["_variant_user_scoped"] = _variant_match_is_user_scoped(
-                    match, user_id
-                )
                 return merged
         # 无任何 variant 命中:返回原配置(剥掉 variants 字段以保持下游消费简洁)
         out = deepcopy(cfg)
@@ -308,4 +282,4 @@ class ConfigResolver:
         return out
 
 
-__all__ = ["ConfigResolver", "compute_cache_user_key"]
+__all__ = ["ConfigResolver"]

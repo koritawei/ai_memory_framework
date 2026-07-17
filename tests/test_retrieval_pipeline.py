@@ -1,4 +1,4 @@
-"""RetrievalPipeline + RetrievalOrchestrator 五阶段串联测试。"""
+"""RetrievalPipeline + RetrievalOrchestrator 五阶段串联测试(Step 4.5)。"""
 
 from __future__ import annotations
 

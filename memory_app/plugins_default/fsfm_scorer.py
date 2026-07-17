@@ -1,4 +1,4 @@
-"""``fsfm_4d`` —— 反馈与生命周期 默认重要性评分插件。
+"""``fsfm_4d`` —— Phase 5 Step 5.3 默认重要性评分插件。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色
@@ -13,7 +13,7 @@
 - ``score_semantic(SemanticMemory)`` —— 同上
 - ``score_ref(MemoryRef)``           —— 轻量,只用 MemoryRef 字段(不调 LLM)
 
-反馈与生命周期 简化:三个方法都用相同算法的不同适配,均不调 LLM(LLM 评估留给 离线巩固 巩固)。
+Phase 5 简化:三个方法都用相同算法的不同适配,均不调 LLM(LLM 评估留给 Phase 6 巩固)。
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class FSFM4DScorer(ImportanceScorer):
-    """FSFM 四维评分插件(反馈与生命周期 默认)。"""
+    """FSFM 四维评分插件(Phase 5 默认)。"""
 
     meta = PluginMeta(
         name="fsfm_4d",

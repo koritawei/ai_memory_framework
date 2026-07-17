@@ -1,4 +1,4 @@
-"""MMRReranker + mmr 插件测试。"""
+"""MMRReranker + mmr 插件测试(Step 4.4)。"""
 
 from __future__ import annotations
 

@@ -1,9 +1,9 @@
-"""POST /v1/memory/retrieve 端点测试。
+"""POST /v1/memory/retrieve 端点测试(Step 4.5)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 测试装配策略
 ═══════════════════════════════════════════════════════════════════════════════
-与 写入热路径 测试一样,直接构造 ``RetrievalOrchestrator`` 注入 ``app_state``,
+与 Phase 2 测试一样,直接构造 ``RetrievalOrchestrator`` 注入 ``app_state``,
 不依赖真实 ES / Milvus / EmbeddingProvider。
 """
 
@@ -59,7 +59,7 @@ def _make_orchestrator(channels) -> RetrievalOrchestrator:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 共用 fixture(沿用 写入热路径 项目根 + 隔离 default.yaml)
+# 共用 fixture(沿用 Phase 2 项目根 + 隔离 default.yaml)
 # ════════════════════════════════════════════════════════════════════════════
 @pytest.fixture(autouse=True)
 def _ensure_plugins_loaded():

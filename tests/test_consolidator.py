@@ -1,4 +1,4 @@
-"""Consolidator 核心 + composite 插件测试。"""
+"""Consolidator 核心 + composite 插件测试(Step 6.1)。"""
 
 from __future__ import annotations
 

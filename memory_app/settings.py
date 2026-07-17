@@ -175,23 +175,23 @@ class Settings(BaseSettings):
     dlq_backend: Literal["memory", "mongo", "redis"]
     task_runner_backend: Literal["asyncio", "redis"]
     task_queue_key: str
-    # ── 并发预算（防止无界 fan-out）──
-    background_max_concurrent: int
-    sync_index_max_concurrent: int
-    cold_path_llm_max_concurrent: int
 
     # ── 可观测 / 限流 ──
     metrics_enabled: bool
     rate_limit_enabled: bool
     rate_limit_rpm: int
     rate_limit_backend: Literal["memory", "redis"]
-    rate_limit_fail_open: bool
 
     # ── DLQ Reconciler ──
     dlq_reconcile_interval_s: int
     dlq_reconcile_batch_size: int
     dlq_reconcile_max_retries: int
     task_runner_consumer_enabled: bool
+
+    # ── 并发预算（防止无界 fan-out）──
+    background_max_concurrent: int
+    sync_index_max_concurrent: int
+    cold_path_llm_max_concurrent: int
 
     # ── 启动行为 ──
     #: 是否扫描第三方包（``[project.entry-points."memory_app.plugins"]``）注册的插件

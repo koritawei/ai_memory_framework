@@ -1,4 +1,4 @@
-"""RegexEntityExtractor 测试( 配套插件)。"""
+"""RegexEntityExtractor 测试(Step 7.1 配套插件)。"""
 
 from __future__ import annotations
 

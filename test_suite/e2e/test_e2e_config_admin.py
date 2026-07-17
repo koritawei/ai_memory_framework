@@ -1,4 +1,4 @@
-"""配置中心与管理面 E2E（设计 ）。"""
+"""配置中心与管理面 E2E（设计 §2.8）。"""
 
 from __future__ import annotations
 

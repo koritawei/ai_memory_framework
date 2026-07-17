@@ -1,4 +1,4 @@
-"""Reranker SPI —— 重排。
+"""Reranker SPI —— 重排（设计文档 §6.1.3 / §6.3）。
 
 链式调用：MMR (λ=0.7) → Cross-Encoder（Top-20，可选）。
 """

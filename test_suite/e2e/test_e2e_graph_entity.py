@@ -1,4 +1,4 @@
-"""实体与图查询 E2E（设计  /  / ）。"""
+"""实体与图查询 E2E（设计 §5.3 / §6.5 / §8）。"""
 
 from __future__ import annotations
 

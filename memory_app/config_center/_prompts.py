@@ -1,5 +1,5 @@
 """PromptConfigMixin —— 把 Prompt 解析/写入/历史能力混入 BaseConfigCenter
-。
+(设计文档 §2.8.4.1 / Step 0.7)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 为什么用 Mixin
@@ -84,7 +84,7 @@ class PromptConfigMixin:
     - ``self._defaults_flat``      ── 默认值表(扁平 dotted-key dict)
     - ``self._resolver``           ── :class:`ConfigResolver` 实例
     - ``self._version``            ── 全局快照版本号
-    - ``self._load_overrides``   ── 子类 hook,加载三级 overrides
+    - ``self._load_overrides()``   ── 子类 hook,加载三级 overrides
     - ``self._persist_entry(...)`` ── 子类 hook,持久化一条 entry
     - ``self._read_history(...)``  ── 子类 hook,读取历史
     - ``self._notify(...)``        ── 派发变更事件

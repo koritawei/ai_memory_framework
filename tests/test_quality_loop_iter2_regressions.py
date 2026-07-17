@@ -1,6 +1,6 @@
 """Quality-loop Iteration 2 的 regression 锁定测试。
 
-每个 case 对应一条本轮 本轮 修复。旧代码下 case 失败,新代码下通过。
+每个 case 对应一条本轮 Phase A 修复。旧代码下 case 失败,新代码下通过。
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ async def test_factory_request_override_does_not_pollute_cache():
     from memory_app.plugins.factory import PluginFactory
     from memory_app.plugins.registry import PluginRegistry
 
-    # 自建 registry 避免污染全局(register 会自动入全局,这里我们 bypass 它)
+    # 自建 registry 避免污染全局(register() 会自动入全局,这里我们 bypass 它)
     class _SpyPlugin(Plugin):
         meta = PluginMeta(
             name="spy_qloop",
@@ -148,10 +148,10 @@ def test_validator_is_cached_across_calls_for_same_schema():
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# Regression #4 (Iter2 B1):FSFMScorer.detail 子分只算一次
+# Regression #4 (Iter2 B1):FSFMScorer.detail() 子分只算一次
 # ════════════════════════════════════════════════════════════════════════════
 def test_fsfm_detail_does_not_double_compute_subscores():
-    """detail 应该 cqa/bve/trs/src 各算 1 次(共 4 次),
+    """detail() 应该 cqa/bve/trs/src 各算 1 次(共 4 次),
     旧实现 detail 调 score 内又算一遍 → 8 次。
     """
     from memory_app.scoring import FSFMScorer

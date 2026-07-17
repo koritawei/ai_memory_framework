@@ -1,4 +1,4 @@
-""" 三库同步 + DLQ 测试。
+"""Step 2.3 三库同步 + DLQ 测试。
 
 ═══════════════════════════════════════════════════════════════════════════════
 覆盖
@@ -136,7 +136,7 @@ class TestESMemCellRepo:
         repo = ESMemCellRepo(client, index_prefix="test")
         await repo.ensure_index()
         await repo.ensure_index()
-        # exists 总返回 False,所以 create 被调两次,但都不抛
+        # exists() 总返回 False,所以 create 被调两次,但都不抛
         assert len(client.indices.created) >= 1
 
     async def test_ensure_index_swallows_error(self):
@@ -342,7 +342,7 @@ class TestIngestPipelineWithSync:
             milvus_repo=milvus_repo,
             dlq=InMemoryDLQ(),
         )
-        # 写入热路径 默认无 embedding → Milvus 不调
+        # Phase 2 默认无 embedding → Milvus 不调
         await pipe.execute([_raw("hi")])
         assert fake.calls == []
         assert len(client.indexed) == 1

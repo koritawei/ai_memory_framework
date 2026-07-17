@@ -1,4 +1,4 @@
-"""离线巩固 E2E（设计  / 方案 E2E-CONS-001）。"""
+"""离线巩固 E2E（设计 §7 / 方案 E2E-CONS-001）。"""
 
 from __future__ import annotations
 

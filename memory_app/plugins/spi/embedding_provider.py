@@ -1,4 +1,4 @@
-"""EmbeddingProvider SPI —— 嵌入模型 Provider。
+"""EmbeddingProvider SPI —— 嵌入模型 Provider（设计文档 §13.1）。
 
 默认实现 ``deepinfra_qwen3``（Qwen3-Embedding-4B，1024 维）；
 可换 ``openai_text_embedding`` / ``local_bge`` / 测试 ``mock_embedding``。

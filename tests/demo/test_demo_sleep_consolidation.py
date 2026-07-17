@@ -1,4 +1,4 @@
-"""Demo: 离线巩固 —— ``SleepConsolidator`` 的睡眠巩固流程。
+"""Demo: Phase 6 离线巩固 —— ``SleepConsolidator`` 的睡眠巩固流程。
 
 ═══════════════════════════════════════════════════════════════════════════════
 本 demo 走读
@@ -71,7 +71,7 @@ def _scene_with_members(member_ids: list[str]) -> MemScene:
 def _reset_prompt_manager_between_tests():
     """每个 demo 都重置 prompt 全局单例,避免上个 demo 的状态影响。
 
-    ``SleepConsolidator.consolidate_scene`` 内部调 ``get_prompt_manager.render_for(...)``;
+    ``SleepConsolidator.consolidate_scene`` 内部调 ``get_prompt_manager().render_for(...)``;
     无显式 init 时回退到 ``StandalonePromptManager``(用内置种子模板)。
     """
     reset_prompt_manager_for_test()
@@ -185,7 +185,7 @@ async def test_demo_immature_scene_skipped_without_llm_call(fake_mongo):
 @pytest.mark.asyncio
 async def test_demo_llm_failure_returns_empty_not_raises(fake_mongo):
     """LLM 不可用时 SleepConsolidator 必须**安静失败**(返回空 + 仅 warning),
-    不能让冷路径/巩固整体崩溃 —— 这是 降级表的契约。"""
+    不能让冷路径/巩固整体崩溃 —— 这是设计文档 §5.4 降级表的契约。"""
     for i, t in enumerate(["a", "b", "c"]):
         await fake_mongo.insert(MemCell(
             mem_cell_id=f"m{i}", tenant_id="t1", user_id="u1",

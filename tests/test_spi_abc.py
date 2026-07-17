@@ -1,4 +1,4 @@
-""" 验收：所有 SPI ABC 反射检查。"""
+"""Step 1.4 验收：所有 SPI ABC 反射检查（设计文档 §2.7.2 / Phase 1 落地确认）。"""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _enumerate_spi_classes():
 
 
 def test_at_least_30_spi_abc():
-    """ 总表共 30 个扩展点，全部应已落地。"""
+    """设计文档 §2.7.2 总表共 30 个扩展点，全部应已落地。"""
     found = _enumerate_spi_classes()
     assert len(found) >= 30, f"应至少 30 个 SPI ABC，实际 {len(found)}"
 
@@ -91,7 +91,7 @@ def test_all_expected_spis_present():
 
 
 def test_noop_plugins_now_implement_real_spi():
-    """当前版本起 noop_sbd / noop_fuser 应继承自正式 SPI。"""
+    """Phase 1 起 noop_sbd / noop_fuser 应继承自正式 SPI。"""
     from memory_app.plugins.spi.boundary_detector import BoundaryDetector
     from memory_app.plugins.spi.fuser import Fuser
     from memory_app.plugins_default.noop_fuser import NoopFuser

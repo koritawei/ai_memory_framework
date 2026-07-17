@@ -1,4 +1,4 @@
-"""``rule_sbd`` —— 写入热路径 规则 SBD 插件(继承 :class:`BoundaryDetector` SPI)。
+"""``rule_sbd`` —— Phase 2 规则 SBD 插件(继承 :class:`BoundaryDetector` SPI)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 职责
@@ -18,9 +18,9 @@
     time_gap_min:    int [1, 1440]   默认 30
     max_window_size: int [1, 100]    默认 20  (亦接受 max_window_turns 别名)
     max_window_tokens: int [1, ...]  默认 512
-    llm_fallback:    bool            默认 false (冷路径 启用 LLM 兜底时为 true)
+    llm_fallback:    bool            默认 false (Phase 3 启用 LLM 兜底时为 true)
 
-冷路径 ``hybrid_sbd`` 实现会复用本类作为基类,只在 ``llm_fallback=true`` 且
+Phase 3 ``hybrid_sbd`` 实现会复用本类作为基类,只在 ``llm_fallback=true`` 且
 规则置信度低时再调 LLM。
 """
 
@@ -43,13 +43,13 @@ logger = logging.getLogger(__name__)
 
 @register
 class RuleSBD(BoundaryDetector):
-    """写入热路径 规则模式 SBD 实现。"""
+    """Phase 2 规则模式 SBD 实现。"""
 
     meta = PluginMeta(
         name="rule_sbd",
         category="memory.generation.boundary_detector",
         version="1.0.0",
-        description="规则 SBD(time_gap + window_turns + window_tokens),写入热路径 默认",
+        description="规则 SBD(time_gap + window_turns + window_tokens),Phase 2 默认",
         config_schema={
             "type": "object",
             "additionalProperties": True,

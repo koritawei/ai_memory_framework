@@ -1,4 +1,4 @@
-"""``hybrid_sbd`` —— 冷路径 主推 SBD 插件:规则优先 + LLM 兜底。
+"""``hybrid_sbd`` —— Phase 3 Step 3.1 主推 SBD 插件:规则优先 + LLM 兜底。
 
 ═══════════════════════════════════════════════════════════════════════════════
 策略
@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class HybridSBD(BoundaryDetector):
-    """规则优先 + LLM 兜底的 SBD 插件(冷路径 默认)。"""
+    """规则优先 + LLM 兜底的 SBD 插件(Phase 3 默认)。"""
 
     meta = PluginMeta(
         name="hybrid_sbd",

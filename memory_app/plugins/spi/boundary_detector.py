@@ -1,8 +1,8 @@
-"""BoundaryDetector SPI —— 语义边界检测 SBD。
+"""BoundaryDetector SPI —— 语义边界检测 SBD（设计文档 §5.1.3）。
 
 实现职责：在 RawData 滑动窗口上判定是否切分新的 MemCell。
-默认实现 ``hybrid_sbd``（写入热路径 落地）= 规则优先 + LLM 兜底，
-对应  优化建议中的「规则模式 P95 < 10ms / LLM 模式 P95 < 2s」目标。
+默认实现 ``hybrid_sbd``（Phase 2 落地）= 规则优先 + LLM 兜底，
+对应 §12.2 优化建议中的「规则模式 P95 < 10ms / LLM 模式 P95 < 2s」目标。
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ class BoundaryContext(BaseModel):
 
 
 class BoundaryDetectionResult(BaseModel):
-    """SBD 判定结果。"""
+    """SBD 判定结果（设计文档 §5.1.3.3）。"""
 
     model_config = ConfigDict(extra="allow")
 
@@ -39,7 +39,7 @@ class BoundaryDetectionResult(BaseModel):
 
 
 class BoundaryDetector(Plugin):
-    """SBD扩展点。规则与 LLM 实现都继承本类。"""
+    """SBD（§5.1.3）扩展点。规则与 LLM 实现都继承本类。"""
 
     @abstractmethod
     async def detect(

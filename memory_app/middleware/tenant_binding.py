@@ -39,14 +39,11 @@ class TenantBindingMiddleware:
             return
         identity = getattr(request.state, "identity", None)
         if identity is None:
-            if settings.auth_enabled:
-                response = JSONResponse(
-                    status_code=403,
-                    content={"detail": "tenant binding requires authenticated identity"},
-                )
-                await response(scope, receive, send)
-                return
-            await self.app(scope, receive, send)
+            response = JSONResponse(
+                status_code=403,
+                content={"detail": "tenant binding requires authenticated identity"},
+            )
+            await response(scope, receive, send)
             return
         body = await request.body()
 
@@ -64,8 +61,12 @@ class TenantBindingMiddleware:
             return
         body_tenant = payload.get("tenant_id")
         body_user = payload.get("user_id")
-        if not body_tenant:
-            await self.app(scope, receive_replay, send)
+        if not body_tenant or not str(body_tenant).strip():
+            response = JSONResponse(
+                status_code=400,
+                content={"detail": "tenant_id is required when tenant binding is enabled"},
+            )
+            await response(scope, receive, send)
             return
         try:
             validate_body_tenant(identity, str(body_tenant), body_user)

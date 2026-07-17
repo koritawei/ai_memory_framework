@@ -1,4 +1,4 @@
-"""SleepConsolidator + ThreePhaseDreamingStrategy 测试。"""
+"""SleepConsolidator + ThreePhaseDreamingStrategy 测试(Step 6.2)。"""
 
 from __future__ import annotations
 

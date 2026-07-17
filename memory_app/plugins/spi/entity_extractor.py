@@ -1,4 +1,4 @@
-"""EntityExtractor SPI —— 实体抽取。
+"""EntityExtractor SPI —— 实体抽取（设计文档 §5.3.1）。
 
 默认实现 ``spacy_zh_en``：spaCy NER + 多层过滤（PROPER / QUOTED / COMPOUND / NOUN）。
 """
@@ -14,7 +14,7 @@ from memory_app.plugins.base import Plugin
 
 
 class EntityType(str, Enum):
-    """实体类型，按优先级降序。"""
+    """实体类型，按优先级降序（设计文档 §5.3.1）。"""
 
     PROPER = "PROPER"        # 大写首字母多词序列：人名 / 地名 / 组织名
     COMPOUND = "COMPOUND"    # 名词-名词复合短语

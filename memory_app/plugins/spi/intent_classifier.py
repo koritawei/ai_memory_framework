@@ -1,7 +1,7 @@
-"""IntentClassifier SPI —— 查询意图分类。
+"""IntentClassifier SPI —— 查询意图分类（设计文档 §6.0）。
 
 默认实现 ``rule_intent_classifier``（关键词 + 时间词正则）；
-写入热路径+ 可切到 ``llm_intent_classifier``（更精准但更贵）。
+Phase 2+ 可切到 ``llm_intent_classifier``（更精准但更贵）。
 """
 
 from __future__ import annotations

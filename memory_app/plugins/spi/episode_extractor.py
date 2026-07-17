@@ -1,7 +1,7 @@
-"""EpisodeExtractor SPI —— 情景记忆抽取。
+"""EpisodeExtractor SPI —— 情景记忆抽取（设计文档 §5.1.4 / §5.1.3.6）。
 
 把 :class:`MemCell` 提炼为 :class:`EpisodicMemory`，含核心叙述 / 情绪 /
-时空 / 感官 / 自我视角等维度（当前版本仅核心叙述维度）。
+时空 / 感官 / 自我视角等维度（Phase 1 仅核心叙述维度）。
 """
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from memory_app.plugins.base import Plugin
 
 
 class ScenarioType(str, Enum):
-    """情景抽取场景。
+    """情景抽取场景（设计文档 §5.1.5.11）。
 
     用以让 LLM prompt 在工作群聊 / 个人助手两类场景下做差异化抽取
-    （冷路径 真实落地时使用）。
+    （Phase 3 真实落地时使用）。
     """
 
     GROUP_CHAT = "group_chat"

@@ -1,4 +1,4 @@
-"""认知分层数据流 E2E（设计  /  / ）。"""
+"""认知分层数据流 E2E（设计 §3 / §4 / §5.1）。"""
 
 from __future__ import annotations
 

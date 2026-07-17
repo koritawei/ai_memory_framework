@@ -1,7 +1,7 @@
-"""ForgettingPolicy SPI —— 遗忘策略。
+"""ForgettingPolicy SPI —— 遗忘策略（设计文档 §7.3）。
 
-核心实现 默认 ``ebbinghaus_v1``（艾宾浩斯简单衰减）；
-写入热路径+ 可切到 ``langevin_sde``（Poincaré 球面 + Langevin SDE）。
+Phase 1 默认 ``ebbinghaus_v1``（艾宾浩斯简单衰减）；
+Phase 2+ 可切到 ``langevin_sde``（Poincaré 球面 + Langevin SDE）。
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ class MemoryRef(BaseModel):
     importance_score: float = 0.0
     created_at: datetime
     last_recalled_at: datetime | None = None
-    #: 写入热路径+ Langevin SDE 启用时填充
+    #: Phase 2+ Langevin SDE 启用时填充
     langevin_position: list[float] = []
 
 

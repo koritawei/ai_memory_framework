@@ -1,4 +1,4 @@
-"""IngestPipeline + IngestService 测试。"""
+"""IngestPipeline + IngestService 测试(Step 2.2)。"""
 
 from __future__ import annotations
 

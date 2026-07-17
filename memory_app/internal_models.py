@@ -1,4 +1,4 @@
-"""内部数据模型。
+"""内部数据模型（设计文档 §4）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 认知分层
@@ -24,17 +24,17 @@
                   + 横向 MetaMemory (溯源/生命周期/访问控制)
 
 ═══════════════════════════════════════════════════════════════════════════════
-当前范围
+Phase 1 简化范围
 ═══════════════════════════════════════════════════════════════════════════════
-本模块实现分层认知记忆架构所需的 **核心字段集**。
-完整的 Proto 字段（如 EpisodicMemory 的六维感官细节、ProfileMemory 的 18
-维特征）将在写入与冷路径管线落地时按需扩展，**不破坏既有 API**。
+本模块仅实现 Vibe Coding 第 1.2 步要求的 **核心字段集**。
+完整的 §4 Proto 字段（如 EpisodicMemory 的六维感官细节、ProfileMemory 的 18
+维特征）将在 Phase 2-3 写入管线落地时按需扩展，**不破坏既有 API**。
 
 ═══════════════════════════════════════════════════════════════════════════════
 ID 字段约定
 ═══════════════════════════════════════════════════════════════════════════════
 所有顶层记忆体的主键字段（``mem_cell_id`` / ``episode_id`` / ``semantic_id``
-等）默认值为 ``str(uuid.uuid4)``：
+等）默认值为 ``str(uuid.uuid4())``：
 - 客户端可显式传入（如评测复现场景）
 - 服务端不传则自动生成
 """
@@ -55,18 +55,18 @@ from memory_app._compat import utcnow
 # 枚举
 # ════════════════════════════════════════════════════════════════════════════
 class MemoryType(str, Enum):
-    """记忆三类顶层组织。"""
+    """记忆三类顶层组织（设计文档 §4.3）。"""
 
     EPISODIC = "EPISODIC"      # 情景记忆：个人经历的具体事件
     SEMANTIC = "SEMANTIC"      # 语义记忆：去情境化的抽象知识
-    PROFILE = "PROFILE"        # 用户画像：跨会话稳定特质
+    PROFILE = "PROFILE"        # 用户画像：跨会话稳定特质（§4.5）
     META = "META"              # 元记忆：溯源 / 生命周期 / 访问控制
 
 
 class MemoryState(str, Enum):
-    """生命周期四态。
+    """生命周期四态（设计文档 §7.1.3）。
 
-    与 Langevin SDE 的 Poincaré 半径区间严格对应（写入热路径+ 启用 SDE 后生效）：
+    与 Langevin SDE 的 Poincaré 半径区间严格对应（Phase 2+ 启用 SDE 后生效）：
 
     ::
 
@@ -75,7 +75,7 @@ class MemoryState(str, Enum):
         COLD     0.7 ≤ r < 1.0  低频，接近球面边界
         ARCHIVED 由被动衰减判定  退出 SDE 管控，进入深度存储
 
-    当前版本尚未启用 SDE，新记忆默认 ``ACTIVE``，状态变更由
+    Phase 1 阶段尚未启用 SDE，新记忆默认 ``ACTIVE``，状态变更由
     :class:`memory_app.plugins.spi.forgetting_policy.ForgettingPolicy` 推动。
     """
 
@@ -86,7 +86,7 @@ class MemoryState(str, Enum):
 
 
 class ConsolidationStatus(str, Enum):
-    """巩固管线状态。"""
+    """巩固管线状态（设计文档 §7.4）。"""
 
     PENDING = "pending"            # 待巩固
     NREM_PROCESSED = "nrem_processed"  # NREM 阶段处理过（事实级去重）
@@ -98,7 +98,7 @@ class ConsolidationStatus(str, Enum):
 # RawData —— 内部通用载体
 # ════════════════════════════════════════════════════════════════════════════
 class RawData(BaseModel):
-    """归一化通用载体。
+    """归一化通用载体（设计文档 §4.2）。
 
     所有外部输入（ConversationTurn / 上传文档 / 事件日志）经
     :func:`memory_app.format_transfer.ingest_to_raw_data_list` 转换后，
@@ -124,10 +124,10 @@ class RawData(BaseModel):
 # MemCell —— 情景前驱单元
 # ════════════════════════════════════════════════════════════════════════════
 class MemCell(BaseModel):
-    """SBD 切边界后的情景前驱单元。
+    """SBD 切边界后的情景前驱单元（设计文档 §4.10）。
 
     定位：管线中间产物，仅做溯源 / 异常重放；不参与最终检索。
-    离线巩固 起由定时清理任务在 30 天后物理删除（``consumed=true`` 标记）。
+    Phase 6 起由定时清理任务在 30 天后物理删除（``consumed=true`` 标记）。
     """
 
     model_config = ConfigDict(extra="allow")
@@ -141,7 +141,7 @@ class MemCell(BaseModel):
 
     # ── 来源溯源 ──
     raw_data_ids: list[str] = Field(default_factory=list)
-    #: 写入幂等用：
+    #: 写入幂等用（设计文档 §12.1 / §5.1.3.9）：
     #: 同一 source_message_id 多次提交只触发一次 SBD
     source_message_ids: list[str] = Field(default_factory=list)
 
@@ -158,11 +158,11 @@ class MemCell(BaseModel):
     # ── 参与者 ──
     participants: list[str] = Field(default_factory=list)
 
-    # ── 生命周期（写入热路径+ 启用 SDE 后填充）──
+    # ── 生命周期（Phase 2+ 启用 SDE 后填充）──
     state: MemoryState = MemoryState.ACTIVE
     strength: float = 1.0  # 自适应强化强度，[0, S_max=5.0]
     access_count: int = 0
-    importance_score: float = 0.0  # FSFM 四维综合评分
+    importance_score: float = 0.0  # FSFM 四维综合评分（§7.2）
 
     # ── 时间 ──
     timestamp: datetime = Field(default_factory=utcnow)  # 事件时间
@@ -177,10 +177,10 @@ class MemCell(BaseModel):
 # EpisodicMemory —— 情景记忆
 # ════════════════════════════════════════════════════════════════════════════
 class EpisodicMemory(BaseModel):
-    """情景记忆。
+    """情景记忆（设计文档 §4.4.1）。
 
-    当前版本仅承载核心叙述维度；情绪 / 时空 / 感官 / 自我视角等其他五维
-    在 冷路径 引入 EpisodeExtractor 时再扩展。
+    Phase 1 仅承载核心叙述维度；情绪 / 时空 / 感官 / 自我视角等其他五维
+    在 Phase 3 引入 EpisodeExtractor 时再扩展。
     """
 
     model_config = ConfigDict(extra="allow")
@@ -200,7 +200,7 @@ class EpisodicMemory(BaseModel):
     # ── 关联实体 ──
     key_entities: list[str] = Field(default_factory=list)
 
-    # ── 情绪（冷路径 扩展）──
+    # ── 情绪（Phase 3 扩展）──
     emotional_valence: float = 0.0  # [-1.0, 1.0]，正值正向 / 负值负向 / 0 中性
     emotional_salience: float | None = None  # [0, 1]
     emotion_type: str | None = None  # joy/sadness/anger/fear/surprise/disgust
@@ -224,7 +224,7 @@ class EpisodicMemory(BaseModel):
 # SemanticMemory —— 语义记忆
 # ════════════════════════════════════════════════════════════════════════════
 class KnowledgeType(str, Enum):
-    """语义记忆子类型。"""
+    """语义记忆子类型（设计文档 §4.4.2）。"""
 
     KNOWLEDGE = "knowledge"  # 一般知识
     FACT = "fact"            # 事实陈述
@@ -233,7 +233,7 @@ class KnowledgeType(str, Enum):
 
 
 class SemanticMemory(BaseModel):
-    """语义记忆。
+    """语义记忆（设计文档 §4.4.2）。
 
     去情境化的抽象知识 —— 从情景中提炼出的稳定事实 / 偏好 / 目标。
     """
@@ -253,7 +253,7 @@ class SemanticMemory(BaseModel):
     source_episode_ids: list[str] = Field(default_factory=list)
     source_memcell_ids: list[str] = Field(default_factory=list)
 
-    # ── 时间有效期──
+    # ── 时间有效期（设计文档 §4.7 SemanticMemoryItem）──
     start_time: str | None = None  # YYYY-MM-DD
     end_time: str | None = None
     duration_days: int | None = None
@@ -279,7 +279,7 @@ class SemanticMemory(BaseModel):
 # MemScene —— 情景聚类视图
 # ════════════════════════════════════════════════════════════════════════════
 class MemScene(BaseModel):
-    """情景聚类视图。
+    """情景聚类视图（设计文档 §4.6）。
 
     ClusterManager 增量聚类的产物；语义沉淀的输入单元。
     """
@@ -314,7 +314,7 @@ class MemScene(BaseModel):
 # EventLog —— 原子事实
 # ════════════════════════════════════════════════════════════════════════════
 class EventLog(BaseModel):
-    """结构化时间线原子事实。
+    """结构化时间线原子事实（设计文档 §4.11）。
 
     每条 atomic_fact 完整独立、可单独被检索。
     """
@@ -337,10 +337,10 @@ class EventLog(BaseModel):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 元记忆三子结构
+# 元记忆三子结构（设计文档 §4.4.3）
 # ════════════════════════════════════════════════════════════════════════════
 class ProvenanceMeta(BaseModel):
-    """溯源 + 变更 + 关联（ 子结构一）。"""
+    """溯源 + 变更 + 关联（§4.4.3 子结构一）。"""
 
     model_config = ConfigDict(extra="allow")
 
@@ -361,7 +361,7 @@ class ProvenanceMeta(BaseModel):
 
 
 class LifecycleMeta(BaseModel):
-    """生命周期 + 检索统计 + Fisher/Langevin 参数（ 子结构二）。"""
+    """生命周期 + 检索统计 + Fisher/Langevin 参数（§4.4.3 子结构二）。"""
 
     model_config = ConfigDict(extra="allow")
 
@@ -383,14 +383,14 @@ class LifecycleMeta(BaseModel):
     retrieval_count: int = 0
     retrieval_recency: float | None = None  # 距今小时数
 
-    # ── 信息几何（写入热路径+，）──
+    # ── 信息几何（Phase 2+，§7.1）──
     fisher_mean: list[float] = Field(default_factory=list)
     fisher_variance: list[float] = Field(default_factory=list)
     langevin_position: list[float] = Field(default_factory=list)  # 8 维 Poincaré
 
 
 class AccessControlMeta(BaseModel):
-    """访问控制（ 子结构三）。"""
+    """访问控制（§4.4.3 子结构三）。"""
 
     model_config = ConfigDict(extra="allow")
 
@@ -400,7 +400,7 @@ class AccessControlMeta(BaseModel):
 
 
 class MetaMemory(BaseModel):
-    """元记忆组合容器。每条 EpisodicMemory / SemanticMemory 关联一条。"""
+    """元记忆组合容器（§4.4.3）。每条 EpisodicMemory / SemanticMemory 关联一条。"""
 
     model_config = ConfigDict(extra="allow")
 
@@ -423,7 +423,7 @@ class MetaMemory(BaseModel):
 # 检索辅助类型
 # ════════════════════════════════════════════════════════════════════════════
 class RankedMemory(BaseModel):
-    """检索通道返回的单条带分数记忆。"""
+    """检索通道返回的单条带分数记忆（设计文档 §6 各通道接口）。"""
 
     model_config = ConfigDict(extra="allow")
 

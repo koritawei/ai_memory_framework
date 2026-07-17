@@ -1,4 +1,4 @@
-"""重排算法。
+"""重排算法(设计文档 §6.3)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 模块组织
@@ -7,7 +7,7 @@
 - :class:`MMRReranker`    Maximal Marginal Relevance 实现
 - :class:`MMRConfig`      参数容器(λ + 是否启用 cross_encoder hook)
 
-Cross-Encoder 精排作为可选增强:本类仅留 hook,具体模型由 检索+ 切到独立
+Cross-Encoder 精排作为可选增强:本类仅留 hook,具体模型由 Phase 4+ 切到独立
 ``CrossEncoderReranker`` 插件,本类默认不调用。
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -55,7 +55,7 @@ class MMRConfig:
     """MMR 参数。"""
 
     mmr_lambda: float = 0.7
-    enable_cross_encoder: bool = False  # 默认关闭(检索 后可切独立插件)
+    enable_cross_encoder: bool = False  # 默认关闭(Phase 4 后可切独立插件)
 
 
 def parse_mmr_config(params: dict[str, Any] | None) -> MMRConfig:

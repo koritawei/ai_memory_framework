@@ -1,4 +1,4 @@
-"""BaseConfigCenter —— 所有 ConfigCenter 后端的通用骨架。
+"""BaseConfigCenter —— 所有 ConfigCenter 后端的通用骨架（设计文档 §2.8.6.1）。
 
 ═══════════════════════════════════════════════════════════════════════════════
 角色与职责
@@ -13,11 +13,11 @@
 
 通用流程（基类完成）：
 
-- ``resolve``             5 级覆盖合并 + 灰度路由 + Schema 校验 + 默认值填充
-- ``write``               Schema 前置校验 → 调子类持久化 → version 自增 → 派发事件
-- ``history``             转发到子类
-- ``watch`` / ``_notify`` 多 callback 派发，单个失败不影响其他
-- ``close``               停 watcher
+- ``resolve()``             5 级覆盖合并 + 灰度路由 + Schema 校验 + 默认值填充
+- ``write()``               Schema 前置校验 → 调子类持久化 → version 自增 → 派发事件
+- ``history()``             转发到子类
+- ``watch()`` / ``_notify`` 多 callback 派发，单个失败不影响其他
+- ``close()``               停 watcher
 
 ═══════════════════════════════════════════════════════════════════════════════
 适用范围
@@ -52,7 +52,7 @@ from .base import (
     ConfigValidationError,
     ResolvedPluginConfig,
 )
-from .resolver import ConfigResolver, compute_cache_user_key
+from .resolver import ConfigResolver
 from .schema import fill_defaults, validate_params
 
 logger = logging.getLogger(__name__)
@@ -171,17 +171,8 @@ class BaseConfigCenter(PromptConfigMixin, ConfigCenter):
             logger.debug(
                 "plugin %s/%s not registered yet (allowed at bootstrap)", category, name
             )
-        cache_user_key = compute_cache_user_key(
-            user_id=user_id,
-            source=source,
-            variant_user_scoped=bool(cfg.get("_variant_user_scoped")),
-        )
         return ResolvedPluginConfig(
-            name=name,
-            params=params,
-            version=version,
-            source=source,
-            cache_user_key=cache_user_key,
+            name=name, params=params, version=version, source=source
         )
 
     async def write(
@@ -238,7 +229,7 @@ class BaseConfigCenter(PromptConfigMixin, ConfigCenter):
         return await self._read_history(category, limit)
 
     async def watch(self, callback: ConfigChangeCallback) -> None:
-        # 串行化 register + spawn 防止两个并发 watch 在 ``_watcher_started=False``
+        # 串行化 register + spawn 防止两个并发 watch() 在 ``_watcher_started=False``
         # 时各自调用 ``_spawn_watcher`` 各起一份后台任务 / Mongo Change Stream。
         async with self._lock:
             self._callbacks.append(callback)

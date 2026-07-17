@@ -1,4 +1,4 @@
-"""scoring.py 工具函数测试(反馈与生命周期 + 5.3)。"""
+"""scoring.py 工具函数测试(Phase 5 Step 5.1 + 5.3)。"""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def _cell(text="test", strength=1.0, access_count=0, *, raw_data_ids=None, days_
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 反馈强化
+# 反馈强化(Step 5.1)
 # ════════════════════════════════════════════════════════════════════════════
 class TestReinforceConfig:
     def test_defaults(self):
@@ -115,7 +115,7 @@ class TestComputeStrengthDelta:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# FSFM
+# FSFM(Step 5.3)
 # ════════════════════════════════════════════════════════════════════════════
 class TestFSFMScorer:
     def test_score_in_unit_interval(self):

@@ -1,4 +1,4 @@
-"""轻量性能烟测（方案，fake profile）。"""
+"""轻量性能烟测（方案 §7.1，fake profile）。"""
 
 from __future__ import annotations
 

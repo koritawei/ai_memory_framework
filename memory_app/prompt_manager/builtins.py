@@ -1,23 +1,23 @@
-"""内置 Prompt 模板种子。
+"""内置 Prompt 模板种子(设计文档 §2.8.4.1 / Step 0.7)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 为什么需要内置种子
 ═══════════════════════════════════════════════════════════════════════════════
 ``config/default.yaml`` 中的 ``memory.prompts`` 段由运维维护,但项目自带的
-冷路径+ 提取器(SBD/episode/semantic 等)在**最坏情况**下(配置文件丢失或
+Phase 3+ 提取器(SBD/episode/semantic 等)在**最坏情况**下(配置文件丢失或
 被运维误删)仍应能跑出可用结果——种子保证基础可用性。
 
 ═══════════════════════════════════════════════════════════════════════════════
-脚手架 内置 5 个 prompt_id
+Phase 0 内置 5 个 prompt_id
 ═══════════════════════════════════════════════════════════════════════════════
 
 | prompt_id                          | 用途              | 消费方       |
 | ---------------------------------- | ----------------- | ------------ |
-| ``episode_extraction``             | 个人情景提取      |      |
-| ``episode_extraction_group_chat``  | 群组情景提取      |      |
-| ``semantic_extraction``            | 语义联想提取      |      |
-| ``sbd_llm_refine``                 | SBD LLM 边界细化  |      |
-| ``user_preference_extract``        | 用户偏好(预留)    | 反馈与生命周期+     |
+| ``episode_extraction``             | 个人情景提取      | Step 3.2     |
+| ``episode_extraction_group_chat``  | 群组情景提取      | Step 3.2     |
+| ``semantic_extraction``            | 语义联想提取      | Step 3.3     |
+| ``sbd_llm_refine``                 | SBD LLM 边界细化  | Step 3.1     |
+| ``user_preference_extract``        | 用户偏好(预留)    | Phase 5+     |
 
 ═══════════════════════════════════════════════════════════════════════════════
 覆盖关系
@@ -112,7 +112,7 @@ _SLEEP_CONSOLIDATION_TEMPLATE = """以下是一组语义相关的记忆片段:
 仅返回 JSON。"""
 
 
-_USER_PREFERENCE_EXTRACT_TEMPLATE = """从以下对话中提取用户偏好(反馈与生命周期+ 启用)。
+_USER_PREFERENCE_EXTRACT_TEMPLATE = """从以下对话中提取用户偏好(Phase 5+ 启用)。
 
 对话:
 {text}
@@ -167,9 +167,9 @@ BUILTIN_PROMPTS: dict[str, PromptSpec] = {
     "user_preference_extract": PromptSpec(
         template=_USER_PREFERENCE_EXTRACT_TEMPLATE,
         variables=["text"],
-        description="用户偏好提取(反馈与生命周期+)",
+        description="用户偏好提取(Phase 5+)",
         version="0.1.0",
-        tags=["generation", "preference", "反馈与生命周期"],
+        tags=["generation", "preference", "phase5"],
     ),
 }
 

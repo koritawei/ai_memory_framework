@@ -1,4 +1,4 @@
-"""Plugin SPI 公共入口。
+"""Plugin SPI 公共入口（设计文档 §2.7）。
 
 业务平面统一通过本模块取得 SPI 抽象与公共服务：
 
@@ -10,7 +10,7 @@
         PluginFactory,                       # 由配置中心驱动构造插件实例
     )
 
-铁律：
+铁律（设计文档 A.0「插件化与配置化铁律」）：
     1. 业务平面**禁止**直接 ``from memory_app.plugins_default.* import *``
     2. 任何具体实现必须以 ``@register`` 装饰 + 携带 :class:`PluginMeta`
     3. 业务管线只调 ``factory.build(category, tenant_id, user_id)`` 取实例

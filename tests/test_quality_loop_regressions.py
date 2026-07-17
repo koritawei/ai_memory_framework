@@ -45,7 +45,7 @@ class _FakeEmbedding:
 
 @pytest.mark.asyncio
 async def test_vector_channel_real_pymilvus_calls_search_exactly_once():
-    """旧实现先 ``sniff = _run_search``(阻塞调一次)再 ``await asyncio.to_thread(_run_search)``
+    """旧实现先 ``sniff = _run_search()``(阻塞调一次)再 ``await asyncio.to_thread(_run_search)``
     (再调一次)→ ``calls == 2``。修复后真客户端只走 to_thread 路径,calls == 1。
     """
     coll = _FakePymilvusCollection()
@@ -97,7 +97,7 @@ async def test_consolidation_service_serializes_concurrent_calls():
     """两个并发 consolidate(tenant=A) + consolidate(tenant=B) 必须看到各自的 scope,
     不能因为 strategy._scope_provider 被对方覆盖而读到错误租户。
 
-    旧实现:set_scope_provider(A) → await run 期间被 set_scope_provider(B) 覆盖
+    旧实现:set_scope_provider(A) → await run() 期间被 set_scope_provider(B) 覆盖
             → A 的 run 读到 B 的 scope。
     新实现:asyncio.Lock 串行化整段。
     """
@@ -165,7 +165,7 @@ async def test_graph_channel_traverses_entities_concurrently():
             return [f"m-from-{node_id[-1]}"]
 
     class _FakeMongo:
-        async def get_by_ids(self, ids):
+        async def get_by_ids(self, ids, **_scope):
             return []  # demo only checks gather timing,不关心实际拉 cell
 
     class _ThreeEntityExtractor:
@@ -305,7 +305,7 @@ def test_admin_safe_version_returns_minus_one_for_invalid():
         async def resolve(self, category, **kw): raise NotImplementedError
         async def write(self, *a, **kw): return 1
         async def history(self, category, limit=50):
-            # 故意混入非整数 version + None,旧实现会 int 抛
+            # 故意混入非整数 version + None,旧实现会 int() 抛
             return [
                 {"version": "not-a-number", "scope": "global", "scope_id": None,
                  "name": "x", "params": {}},

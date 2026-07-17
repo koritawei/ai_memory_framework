@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
-from memory_app.deps.builders.base import ServiceBuilder
+from memory_app.deps.builders.base import ServiceBuilder, shared_mongo_repo
 
 if TYPE_CHECKING:
     from memory_app.deps.state import AppState
@@ -22,7 +22,6 @@ class FeedbackLifecycleBuilder(ServiceBuilder):
 
     async def build(self, state: "AppState") -> None:
         from memory_app.lifecycle import LifecycleUpdater
-        from memory_app.repositories.mongo_repo import MongoMemCellRepo
         from memory_app.services import FeedbackService
 
         assert state.plugin_factory is not None  # noqa: S101
@@ -38,13 +37,7 @@ class FeedbackLifecycleBuilder(ServiceBuilder):
             )
             return
 
-        mongo_repo = state.mongo_repo
-        if mongo_repo is None and state.clients.mongo_db is not None:
-            mongo_repo = MongoMemCellRepo(state.clients.mongo_db)
-            state.mongo_repo = mongo_repo
-        if mongo_repo is None:
-            logger.warning("feedback_service skipped: mongo unavailable")
-            return
+        mongo_repo = await shared_mongo_repo(state)
 
         state.feedback_service = FeedbackService(
             mongo_repo=mongo_repo, reinforcer=reinforcer
@@ -85,12 +78,16 @@ class FeedbackLifecycleBuilder(ServiceBuilder):
         if orch is None or updater is None:
             return
 
-        async def _hook(results: list) -> None:
+        async def _hook(ctx, results: list) -> None:
             if not results:
                 return
             ids = [m.memory_id for m in results]
             try:
-                updater.on_retrieval_hit(ids)
+                updater.on_retrieval_hit(
+                    ids,
+                    tenant_id=ctx.request.tenant_id,
+                    user_id=ctx.request.user_id,
+                )
             except Exception as e:  # noqa: BLE001
                 logger.warning("lifecycle on_retrieval_hit failed: %s", e)
 

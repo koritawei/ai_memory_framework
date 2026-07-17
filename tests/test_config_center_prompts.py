@@ -1,4 +1,4 @@
-"""``PromptConfigMixin`` 端到端测试( / )。
+"""``PromptConfigMixin`` 端到端测试(Step 0.7 / §2.8.4.1)。
 
 ═══════════════════════════════════════════════════════════════════════════════
 覆盖
@@ -358,7 +358,7 @@ class TestPromptChangeNotify:
 # ════════════════════════════════════════════════════════════════════════════
 class TestBuiltinPrompts:
     def test_builtin_count_matches_design(self):
-        # 脚手架  的 5 个 + 离线巩固 新增 sleep_consolidation
+        # Phase 0 §2.8.4.1 的 5 个 + Phase 6 Step 6.2 新增 sleep_consolidation
         assert set(BUILTIN_PROMPTS.keys()) == {
             "episode_extraction",
             "episode_extraction_group_chat",

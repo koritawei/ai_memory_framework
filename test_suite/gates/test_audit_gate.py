@@ -1,4 +1,4 @@
-"""插件化审计门禁（测试方案  lint/static）。"""
+"""插件化审计门禁（测试方案 §8.2 lint/static）。"""
 
 from __future__ import annotations
 
