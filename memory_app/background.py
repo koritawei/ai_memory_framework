@@ -127,7 +127,9 @@ class BackgroundTaskRunner:
                 if sem is not None:
                     sem.release()
 
-        if await run_with_retry(
+        from memory_app.task_queue.retry import TaskOutcome
+
+        outcome = await run_with_retry(
             attempt,
             policy=self._policy,
             task_id=task_id or "?",
@@ -135,7 +137,8 @@ class BackgroundTaskRunner:
             dlq=self._dlq,
             log_name="background task",
             default_dlq_target="background_task",
-        ):
+        )
+        if outcome is TaskOutcome.SUCCESS:
             self._completed += 1
         else:
             self._failed_to_dlq += 1

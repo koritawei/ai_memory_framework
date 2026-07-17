@@ -24,7 +24,7 @@ class ColdPathServiceBuilder(ServiceBuilder):
         from memory_app.repositories.mongo_repo import MongoMemCellRepo
         from memory_app.services import ColdPathService, IngestService
         from memory_app.task_queue.factory import create_task_runner
-        from memory_app.task_queue.redis_runner import RedisTaskRunner
+        from memory_app.task_queue.arq_runner import ArqTaskRunner
 
         assert state.plugin_factory is not None  # noqa: S101
 
@@ -73,7 +73,7 @@ class ColdPathServiceBuilder(ServiceBuilder):
             pipeline=pipeline, runner=state.background_runner
         )
 
-        if isinstance(state.background_runner, RedisTaskRunner):
+        if isinstance(state.background_runner, ArqTaskRunner):
             mongo_repo = state.mongo_repo
             if mongo_repo is None and state.clients.mongo_db is not None:
                 mongo_repo = MongoMemCellRepo(state.clients.mongo_db)

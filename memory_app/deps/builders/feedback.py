@@ -44,9 +44,16 @@ class FeedbackLifecycleBuilder(ServiceBuilder):
         )
 
         # LifecycleUpdater(Step 5.2):基于 BackgroundTaskRunner 触发(可无)
+        from memory_app.lifecycle import register_lifecycle_handlers
+        from memory_app.task_queue.arq_runner import ArqTaskRunner
+
         state.lifecycle_updater = LifecycleUpdater(
             mongo_repo=mongo_repo, runner=state.background_runner
         )
+        if isinstance(state.background_runner, ArqTaskRunner):
+            register_lifecycle_handlers(
+                state.background_runner, state.lifecycle_updater
+            )
 
         # ImportanceScorer(Step 5.3):可选
         try:

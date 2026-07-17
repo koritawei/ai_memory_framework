@@ -1,4 +1,4 @@
-"""独立 Redis 冷路径 Worker（类 RQ 消费进程）。"""
+"""独立 arq 冷路径 Worker。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import sys
 
 from memory_app.deps import app_state
 from memory_app.settings import get_settings
-from memory_app.task_queue.redis_runner import RedisTaskRunner
+from memory_app.task_queue.arq_runner import ArqTaskRunner
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +18,25 @@ async def _run() -> int:
     settings = get_settings()
     if settings.task_runner_backend != "redis":
         logger.error(
-            "task_runner_backend=%s; memory-worker requires redis",
+            "task_runner_backend=%s; memory-worker requires redis/arq",
             settings.task_runner_backend,
         )
         return 1
 
+    # worker 进程必须消费队列
+    if hasattr(settings, "model_copy"):
+        settings = settings.model_copy(update={"task_runner_consumer_enabled": True})
+    else:
+        object.__setattr__(settings, "task_runner_consumer_enabled", True)
+
     await app_state.init(settings)
     runner = app_state.background_runner
-    if not isinstance(runner, RedisTaskRunner):
-        logger.error("cold path / redis runner not configured")
+    if not isinstance(runner, ArqTaskRunner):
+        logger.error("arq / redis task runner not configured")
         await app_state.close()
         return 1
 
-    if runner._consumer_task is None:
+    if not runner._started:
         await runner.start()
 
     stop = asyncio.Event()
@@ -39,11 +45,10 @@ async def _run() -> int:
         try:
             loop.add_signal_handler(sig, stop.set)
         except NotImplementedError:
-            # Windows
             signal.signal(sig, lambda *_: stop.set())
 
     logger.info(
-        "memory-worker running (queue=%s, dlq=%s)",
+        "memory-worker running (arq queue=%s, dlq=%s)",
         settings.task_queue_key,
         settings.dlq_backend,
     )

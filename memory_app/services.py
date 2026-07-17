@@ -49,15 +49,19 @@ class IngestService:
     - 返回 ``mem_cell_id`` 列表
     - **可选**触发冷路径(Phase 3):构造时注入 ``cold_path_service`` 后,
       热路径成功落 SOT 后自动 ``schedule`` 每个 cell 的后台抽取
+    - **可选**幂等键:构造时注入 ``idempotency_store``，路由传入
+      ``idempotency_key`` 时 ``claim`` 去重
     """
 
     def __init__(
         self,
         pipeline: IngestPipeline,
         cold_path_service: "ColdPathService | None" = None,
+        idempotency_store: Any | None = None,
     ) -> None:
         self._pipeline = pipeline
         self._cold_path = cold_path_service
+        self._idempotency = idempotency_store
 
     # ────────────────────────────────────────────────────────────────────────
     # 公开钩子(替代旧版"装配层 monkey-patch private _cold_path"反模式)
@@ -69,27 +73,67 @@ class IngestService:
         """
         self._cold_path = cold_path_service
 
-    async def ingest(self, raw_data_list: list[RawData]) -> list[str]:
+    def attach_idempotency_store(self, store: Any | None) -> None:
+        self._idempotency = store
+
+    async def ingest(
+        self,
+        raw_data_list: list[RawData],
+        *,
+        idempotency_key: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[str]:
         """执行写入。
 
         :param raw_data_list: 已经过 ``format_transfer`` 的内部 RawData 列表
+        :param idempotency_key: 可选客户端幂等键
         :returns: 落库成功的 ``mem_cell_id`` 列表(顺序与 segment 一致)
         :raises Exception: 任意阶段抛出的领域错误(MongoDB 写失败等)
         """
         if not raw_data_list:
             return []
-        # 复用 BasePipeline.run_to_context 模板方法 ——
-        # 不再手抄 build_context + for stage 循环,跟随基类未来的
-        # tracing / 错误处理增强自动起效。
-        ctx = await self._pipeline.run_to_context(raw_data_list)
-        cell_ids = [c.mem_cell_id for c in ctx.cells]
-        # 冷路径:fire-and-forget,异常不影响热路径返回
-        if self._cold_path is not None and ctx.cells:
-            try:
-                self._cold_path.schedule_many(ctx.cells)
-            except Exception as e:  # noqa: BLE001
-                logger.warning("cold path schedule failed (degraded): %s", e)
-        return cell_ids
+
+        claim_key: str | None = None
+        if idempotency_key and self._idempotency is not None:
+            claim_key = (
+                f"ingest:{tenant_id or ''}:{user_id or ''}:{idempotency_key}"
+            )
+            claim = await self._idempotency.claim(
+                claim_key, {"status": "processing", "mem_cell_ids": []}
+            )
+            if not claim.claimed:
+                existing = claim.existing_value or {}
+                ids = existing.get("mem_cell_ids")
+                if isinstance(ids, list) and ids:
+                    return [str(x) for x in ids]
+                # 另一请求仍在处理：返回空并记录，避免双写
+                logger.info("idempotency hit in-progress for key=%s", claim_key)
+                return list(ids) if isinstance(ids, list) else []
+
+        try:
+            ctx = await self._pipeline.run_to_context(raw_data_list)
+            cell_ids = [c.mem_cell_id for c in ctx.cells]
+            if claim_key and self._idempotency is not None:
+                complete = getattr(self._idempotency, "complete", None)
+                if callable(complete):
+                    await complete(
+                        claim_key,
+                        {"status": "done", "mem_cell_ids": cell_ids},
+                    )
+            if self._cold_path is not None and ctx.cells:
+                try:
+                    self._cold_path.schedule_many(ctx.cells)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("cold path schedule failed (degraded): %s", e)
+            return cell_ids
+        except Exception:
+            if claim_key and self._idempotency is not None:
+                try:
+                    await self._idempotency.release(claim_key)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("idempotency release failed: %s", e)
+            raise
 
 
 # ════════════════════════════════════════════════════════════════════════════

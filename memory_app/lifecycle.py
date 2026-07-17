@@ -52,6 +52,10 @@ DEFAULT_STRENGTH_DELTA = 0.1
 # 操作员若改 Reinforcer 的 s_max,builder 层应同步注入到 LifecycleUpdater。
 DEFAULT_S_MAX = 5.0
 
+# RedisTaskRunner 命名 handler（跨进程可序列化）
+HANDLER_BULK = "lifecycle_bulk"
+HANDLER_ONE = "lifecycle_one"
+
 
 def compute_state(
     *,
@@ -145,6 +149,25 @@ class LifecycleUpdater:
     ) -> None:
         """提交一个 batched 任务把所有 id 一次 update_many。"""
         if self._runner is not None:
+            submit_handler = getattr(self._runner, "submit_handler", None)
+            if callable(submit_handler):
+                submit_handler(
+                    HANDLER_BULK,
+                    {
+                        "mem_cell_ids": list(mem_cell_ids),
+                        "tenant_id": tenant_id,
+                        "user_id": user_id,
+                        "strength_delta": self._strength_delta,
+                        "s_max": self._s_max,
+                    },
+                    task_id=f"lifecycle:bulk:{len(mem_cell_ids)}",
+                    on_failure_record={
+                        "target": "lifecycle_update",
+                        "operation": "bulk_update",
+                    },
+                )
+                return
+
             async def _factory():
                 await self._update_bulk(
                     mem_cell_ids, tenant_id=tenant_id, user_id=user_id
@@ -196,7 +219,25 @@ class LifecycleUpdater:
         user_id: str | None = None,
     ) -> None:
         if self._runner is not None:
-            # 用 BackgroundTaskRunner(带重试 + DLQ)
+            submit_handler = getattr(self._runner, "submit_handler", None)
+            if callable(submit_handler):
+                submit_handler(
+                    HANDLER_ONE,
+                    {
+                        "mem_cell_id": mem_cell_id,
+                        "tenant_id": tenant_id,
+                        "user_id": user_id,
+                        "strength_delta": self._strength_delta,
+                        "s_max": self._s_max,
+                    },
+                    task_id=mem_cell_id,
+                    on_failure_record={
+                        "target": "lifecycle_update",
+                        "operation": "update",
+                    },
+                )
+                return
+
             async def _factory():
                 await self._update_single(
                     mem_cell_id, tenant_id=tenant_id, user_id=user_id
@@ -320,4 +361,57 @@ def _normalize(t: datetime) -> datetime:
     return t.replace(tzinfo=timezone.utc) if t.tzinfo is None else t
 
 
-__all__ = ["LifecycleUpdater", "compute_state", "DEFAULT_STRENGTH_DELTA", "DEFAULT_S_MAX"]
+def register_lifecycle_handlers(runner: Any, updater: "LifecycleUpdater") -> None:
+    """在 RedisTaskRunner 上注册 lifecycle 命名 handler（API / worker 均需调用）。"""
+    register = getattr(runner, "register_handler", None)
+    if not callable(register):
+        return
+
+    async def _bulk(payload: dict[str, Any]) -> None:
+        ids = list(payload.get("mem_cell_ids") or [])
+        if not ids:
+            return
+        delta = float(payload.get("strength_delta", updater._strength_delta))
+        s_max = float(payload.get("s_max", updater._s_max))
+        # 临时覆盖参数，避免 builder 与队列 payload 漂移时行为不一致
+        old_delta, old_max = updater._strength_delta, updater._s_max
+        updater._strength_delta, updater._s_max = delta, s_max
+        try:
+            await updater._update_bulk(
+                ids,
+                tenant_id=payload.get("tenant_id"),
+                user_id=payload.get("user_id"),
+            )
+        finally:
+            updater._strength_delta, updater._s_max = old_delta, old_max
+
+    async def _one(payload: dict[str, Any]) -> None:
+        mid = payload.get("mem_cell_id") or ""
+        if not mid:
+            return
+        delta = float(payload.get("strength_delta", updater._strength_delta))
+        s_max = float(payload.get("s_max", updater._s_max))
+        old_delta, old_max = updater._strength_delta, updater._s_max
+        updater._strength_delta, updater._s_max = delta, s_max
+        try:
+            await updater._update_single(
+                mid,
+                tenant_id=payload.get("tenant_id"),
+                user_id=payload.get("user_id"),
+            )
+        finally:
+            updater._strength_delta, updater._s_max = old_delta, old_max
+
+    register(HANDLER_BULK, _bulk)
+    register(HANDLER_ONE, _one)
+
+
+__all__ = [
+    "LifecycleUpdater",
+    "compute_state",
+    "DEFAULT_STRENGTH_DELTA",
+    "DEFAULT_S_MAX",
+    "HANDLER_BULK",
+    "HANDLER_ONE",
+    "register_lifecycle_handlers",
+]

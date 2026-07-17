@@ -94,6 +94,19 @@ class MilvusMemCellRepo:
 
         await asyncio.to_thread(col.insert, [record])
 
+    async def upsert(
+        self,
+        mem_cell_id: str,
+        embedding: list[float],
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """幂等写入：先按主键删除再插入，避免 reconcile 重复产生向量。"""
+        try:
+            await self.delete(mem_cell_id)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("milvus upsert pre-delete for %s: %s", mem_cell_id, e)
+        await self.insert(mem_cell_id, embedding, metadata)
+
     async def bulk_insert(
         self,
         records: list[tuple[str, list[float], dict[str, Any] | None]],

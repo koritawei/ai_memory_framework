@@ -66,6 +66,8 @@ async def test_reconcile_dry_run_does_not_remove():
     )
     report = await rec.reconcile(limit=10, dry_run=True)
     assert report["succeeded"] == 0
+    assert report["failed"] == 0
+    assert report["skipped"] == 1
     assert report["details"][0]["status"] == "dry_run"
     assert await dlq.size() == 1
     assert es.indexed == []

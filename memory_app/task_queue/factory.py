@@ -7,17 +7,20 @@ from typing import Any
 
 from memory_app.background import BackgroundTaskRunner
 from memory_app.settings import Settings
-from memory_app.task_queue.redis_runner import RedisTaskRunner
+from memory_app.task_queue.arq_runner import ArqTaskRunner
 
 logger = logging.getLogger(__name__)
 
 
 async def create_task_runner(settings: Settings, clients: Any, dlq: Any) -> Any:
-    """按 ``settings.task_runner_backend`` 创建后台任务 runner。"""
+    """按 ``settings.task_runner_backend`` 创建后台任务 runner。
+
+    ``redis`` 后端现使用 **arq**（不再自研 LIST/BRPOPLPUSH）。
+    """
     if settings.task_runner_backend == "redis":
-        if clients.redis_client is None:
+        if not settings.redis_url:
             msg = (
-                "task_runner_backend=redis but redis client unavailable. "
+                "task_runner_backend=redis but MEMORY_REDIS_URL empty. "
                 "Fix MEMORY_REDIS_URL or set task_runner_backend=asyncio."
             )
             if settings.debug:
@@ -27,21 +30,25 @@ async def create_task_runner(settings: Settings, clients: Any, dlq: Any) -> Any:
                     max_concurrent=settings.background_max_concurrent,
                 )
             raise RuntimeError(msg)
-        runner = RedisTaskRunner(
-            clients.redis_client,
-            settings.task_queue_key,
+        runner = ArqTaskRunner(
+            redis_url=settings.redis_url,
+            queue_name=settings.task_queue_key,
             dlq=dlq,
             max_concurrent=settings.background_max_concurrent,
+            in_process=False,
         )
         if settings.task_runner_consumer_enabled:
             await runner.start()
         logger.info(
-            "task runner initialized: redis queue=%s consumer=%s",
+            "task runner initialized: arq queue=%s consumer=%s",
             settings.task_queue_key,
             settings.task_runner_consumer_enabled,
         )
         return runner
-    logger.info("task runner initialized: asyncio max_concurrent=%s", settings.background_max_concurrent)
+    logger.info(
+        "task runner initialized: asyncio max_concurrent=%s",
+        settings.background_max_concurrent,
+    )
     return BackgroundTaskRunner(
         dlq=dlq,
         max_concurrent=settings.background_max_concurrent,

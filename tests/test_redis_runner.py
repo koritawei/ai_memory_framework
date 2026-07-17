@@ -1,72 +1,98 @@
-"""RedisTaskRunner 可靠投递测试。"""
+"""ArqTaskRunner 接口与 DLQ 语义测试（in_process，无需 Redis）。"""
 
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
 
-from memory_app.task_queue.redis_runner import RedisTaskRunner
-from tests.fixtures.fake_redis import FakeRedisLists
+from memory_app.task_queue.arq_runner import ArqTaskRunner
+from memory_app.task_queue.retry import RetryPolicy
 
 
 @pytest.mark.asyncio
-class TestRedisTaskRunnerReliableDelivery:
-    async def test_brpoplpush_then_ack_clears_processing(self):
-        redis = FakeRedisLists()
-        runner = RedisTaskRunner(redis, "memory:tasks:test", max_concurrent=2)
+class TestArqTaskRunnerInProcess:
+    async def test_submit_and_handle(self):
+        runner = ArqTaskRunner(
+            queue_name="memory:tasks:test",
+            max_concurrent=2,
+            in_process=True,
+        )
         handled: list[dict] = []
 
         async def handler(payload: dict) -> None:
             handled.append(payload)
 
         runner.register_handler("echo", handler)
+        await runner.start()
         runner.submit_handler("echo", {"x": 1}, task_id="t1")
         await asyncio.sleep(0.05)
-        assert len(redis.lists.get("memory:tasks:test", [])) == 1
-
-        await runner.start()
-        await asyncio.sleep(0.1)
         await runner.shutdown()
 
         assert handled == [{"x": 1}]
-        assert redis.lists.get("memory:tasks:test:processing", []) == []
+        assert runner.stats()["completed"] == 1
+        assert runner.stats()["backend"] == "arq_in_process"
 
-    async def test_recovery_requeues_processing_on_start(self):
-        redis = FakeRedisLists()
-        stale = json.dumps({"handler": "echo", "payload": {"y": 2}, "task_id": "t2", "on_failure_record": {}})
-        redis.lists["memory:tasks:test:processing"] = [stale]
+    async def test_unknown_handler_goes_dlq(self):
+        class _DLQ:
+            def __init__(self) -> None:
+                self.records = []
 
-        runner = RedisTaskRunner(redis, "memory:tasks:test", max_concurrent=2)
-        handled: list[dict] = []
+            async def enqueue(self, record) -> None:
+                self.records.append(record)
 
-        async def handler(payload: dict) -> None:
-            handled.append(payload)
-
-        runner.register_handler("echo", handler)
+        dlq = _DLQ()
+        runner = ArqTaskRunner(
+            queue_name="memory:tasks:test",
+            in_process=True,
+            dlq=dlq,
+            retry_policy=RetryPolicy(max_attempts=1),
+        )
         await runner.start()
-        await asyncio.sleep(0.1)
+        runner.submit_handler("missing", {}, task_id="m1")
+        await asyncio.sleep(0.05)
         await runner.shutdown()
+        assert len(dlq.records) == 1
+        assert runner.stats()["failed_to_dlq"] == 1
 
-        assert handled == [{"y": 2}]
-        assert redis.lists.get("memory:tasks:test:processing", []) == []
+    async def test_dlq_failure_raises_in_execute(self):
+        runner = ArqTaskRunner(
+            queue_name="memory:tasks:test",
+            in_process=True,
+            dlq=None,
+            retry_policy=RetryPolicy(max_attempts=1, base_delay_s=0.001),
+        )
 
-    async def test_cancelled_handler_leaves_message_in_processing(self):
-        redis = FakeRedisLists()
-        runner = RedisTaskRunner(redis, "memory:tasks:test", max_concurrent=1)
+        async def boom(_payload: dict) -> None:
+            raise RuntimeError("fail")
 
-        async def slow_handler(_payload: dict) -> None:
-            await asyncio.sleep(10)
+        runner.register_handler("boom", boom)
+        with pytest.raises(RuntimeError, match="DLQ enqueue failed"):
+            await runner._execute(
+                "boom", {}, task_id="bad", on_failure_record={"target": "redis_task"}
+            )
 
-        runner.register_handler("slow", slow_handler)
-        raw = json.dumps({"handler": "slow", "payload": {}, "task_id": "s", "on_failure_record": {}})
-        redis.lists["memory:tasks:test:processing"] = [raw]
+    async def test_two_in_process_runners_independent(self):
+        """in_process 不共享队列；多 worker 竞争由真实 arq/redis 覆盖。"""
+        a_handled: list[str] = []
+        b_handled: list[str] = []
 
-        task = asyncio.create_task(runner._run_message_guarded(json.loads(raw), raw))
-        await asyncio.sleep(0.02)
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
+        async def ha(p: dict) -> None:
+            a_handled.append(p["id"])
 
-        assert raw in redis.lists.get("memory:tasks:test:processing", [])
+        async def hb(p: dict) -> None:
+            b_handled.append(p["id"])
+
+        a = ArqTaskRunner(queue_name="q", in_process=True, task_name_prefix="a")
+        b = ArqTaskRunner(queue_name="q", in_process=True, task_name_prefix="b")
+        a.register_handler("work", ha)
+        b.register_handler("work", hb)
+        await a.start()
+        await b.start()
+        a.submit_handler("work", {"id": "a1"}, task_id="a1")
+        b.submit_handler("work", {"id": "b1"}, task_id="b1")
+        await asyncio.sleep(0.05)
+        await a.shutdown()
+        await b.shutdown()
+        assert a_handled == ["a1"]
+        assert b_handled == ["b1"]

@@ -71,7 +71,7 @@ class SyncReconciler:
             status = detail["status"]
             if status == "ok":
                 result["succeeded"] += 1
-            elif status == "skipped":
+            elif status in ("skipped", "dry_run"):
                 result["skipped"] += 1
             elif status == "exhausted":
                 result["exhausted"] += 1
@@ -121,11 +121,19 @@ class SyncReconciler:
                         "status": "skipped",
                         "error": "embedding not ready (cold path pending)",
                     }
-                await self._milvus_repo.insert(
-                    cell.mem_cell_id,
-                    list(cell.embedding),
-                    metadata={"tenant_id": cell.tenant_id, "user_id": cell.user_id},
-                )
+                upsert = getattr(self._milvus_repo, "upsert", None)
+                if callable(upsert):
+                    await upsert(
+                        cell.mem_cell_id,
+                        list(cell.embedding),
+                        metadata={"tenant_id": cell.tenant_id, "user_id": cell.user_id},
+                    )
+                else:
+                    await self._milvus_repo.insert(
+                        cell.mem_cell_id,
+                        list(cell.embedding),
+                        metadata={"tenant_id": cell.tenant_id, "user_id": cell.user_id},
+                    )
         except Exception as e:  # noqa: BLE001
             err = str(e)
             logger.warning(

@@ -122,21 +122,38 @@ async def lifespan(app: FastAPI):
     if interval > 0:
 
         async def _auto_reconcile_loop() -> None:
+            from memory_app.concurrency import RedisDistributedLock
             from memory_app.reconciliation.sync_reconciler import build_reconciler_from_state
 
+            lock_key = f"{settings.task_queue_key}:dlq_reconcile_lock"
             while True:
                 await asyncio.sleep(interval)
                 if reconcile_lock.locked():
                     logger.debug("skip dlq reconcile: previous run still active")
                     continue
                 async with reconcile_lock:
-                    rec = build_reconciler_from_state(app_state)
-                    if rec is None:
-                        continue
+                    dist_lock: RedisDistributedLock | None = None
+                    redis = getattr(app_state.clients, "redis_client", None)
+                    if redis is not None:
+                        dist_lock = RedisDistributedLock(
+                            redis,
+                            lock_key,
+                            ttl_s=max(60, interval * 2),
+                        )
+                        if not await dist_lock.acquire():
+                            logger.debug("skip dlq reconcile: another replica holds lock")
+                            continue
                     try:
-                        await rec.reconcile(limit=settings.dlq_reconcile_batch_size)
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning("auto dlq reconcile failed: %s", e)
+                        rec = build_reconciler_from_state(app_state)
+                        if rec is None:
+                            continue
+                        try:
+                            await rec.reconcile(limit=settings.dlq_reconcile_batch_size)
+                        except Exception as e:  # noqa: BLE001
+                            logger.warning("auto dlq reconcile failed: %s", e)
+                    finally:
+                        if dist_lock is not None:
+                            await dist_lock.release()
 
         reconcile_task = asyncio.create_task(_auto_reconcile_loop())
 

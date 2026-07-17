@@ -80,13 +80,17 @@ class IngestServiceBuilder(ServiceBuilder):
             sync_index_max_concurrent=state.settings.sync_index_max_concurrent,
         )
         state.mongo_repo = mongo_repo
-        state.ingest_service = IngestService(pipeline)
+        from memory_app.repositories.idempotency import create_idempotency_store
+
+        idem = create_idempotency_store(state.settings, state.clients)
+        state.ingest_service = IngestService(pipeline, idempotency_store=idem)
         logger.info(
-            "ingest_service initialized: sbd=%s, es=%s, milvus=%s, dlq=%s",
+            "ingest_service initialized: sbd=%s, es=%s, milvus=%s, dlq=%s, idempotency=%s",
             sbd.meta.name,
             "ok" if es_repo else "off",
             "ok" if milvus_repo else "off",
             state.settings.dlq_backend,
+            type(idem).__name__ if idem else "off",
         )
 
 

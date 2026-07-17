@@ -320,14 +320,25 @@ class SyncIndexStage(PipelineStage[IngestPipelineContext]):
             # Phase 2 冷路径未生成 embedding 时跳过 —— 这是预期路径,不入 DLQ
             return
         try:
-            await self._milvus_repo.insert(
-                cell.mem_cell_id,
-                cell.embedding,
-                metadata={
-                    "tenant_id": cell.tenant_id,
-                    "user_id": cell.user_id,
-                },
-            )
+            upsert = getattr(self._milvus_repo, "upsert", None)
+            if callable(upsert):
+                await upsert(
+                    cell.mem_cell_id,
+                    cell.embedding,
+                    metadata={
+                        "tenant_id": cell.tenant_id,
+                        "user_id": cell.user_id,
+                    },
+                )
+            else:
+                await self._milvus_repo.insert(
+                    cell.mem_cell_id,
+                    cell.embedding,
+                    metadata={
+                        "tenant_id": cell.tenant_id,
+                        "user_id": cell.user_id,
+                    },
+                )
         except Exception as e:  # noqa: BLE001
             logger.warning(
                 "Milvus sync failed for %s (degraded → DLQ): %s",

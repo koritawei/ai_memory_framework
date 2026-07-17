@@ -88,7 +88,12 @@ async def ingest_memory(
     if not raw_data_list:
         return IngestResponse(mem_cell_ids=[], status="empty", segment_count=0)
     try:
-        cell_ids = await service.ingest(raw_data_list)
+        cell_ids = await service.ingest(
+            raw_data_list,
+            idempotency_key=request.idempotency_key,
+            tenant_id=request.tenant_id,
+            user_id=request.user_id,
+        )
     except Exception as e:  # noqa: BLE001
         logger.error(
             "ingest failed for tenant=%s user=%s: %s",

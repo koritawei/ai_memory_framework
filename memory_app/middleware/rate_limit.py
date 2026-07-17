@@ -1,12 +1,12 @@
-"""令牌桶限流中间件。"""
+"""HTTP 限流中间件 —— 基于 limits 库（Moving Window）。"""
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import time
 from typing import Any
 
+from limits import parse
+from limits.aio.strategies import MovingWindowRateLimiter
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -15,28 +15,28 @@ from memory_app.settings import Settings, get_settings
 logger = logging.getLogger(__name__)
 
 
-class _MemoryBucket:
-    def __init__(self, rpm: int) -> None:
-        self._capacity = max(1, rpm)
-        self._tokens = float(self._capacity)
-        self._last = time.monotonic()
-        self._lock = asyncio.Lock()
+def _build_limiter(settings: Settings) -> tuple[MovingWindowRateLimiter, Any]:
+    """按配置构造 limits 策略与 RateLimitItem。"""
+    item = parse(f"{max(1, int(settings.rate_limit_rpm))}/minute")
+    if settings.rate_limit_backend == "redis":
+        try:
+            from limits.aio.storage.redis import RedisStorage
 
-    async def allow(self) -> bool:
-        async with self._lock:
-            now = time.monotonic()
-            elapsed = now - self._last
-            self._last = now
-            refill = (elapsed / 60.0) * self._capacity
-            self._tokens = min(self._capacity, self._tokens + refill)
-            if self._tokens < 1.0:
-                return False
-            self._tokens -= 1.0
-            return True
+            storage = RedisStorage(
+                settings.redis_url,
+                implementation="redispy",
+                key_prefix="memory:rl",
+            )
+            return MovingWindowRateLimiter(storage), item
+        except Exception as e:  # noqa: BLE001
+            logger.warning("limits RedisStorage init failed, fallback memory: %s", e)
+    from limits.aio.storage.memory import MemoryStorage
+
+    return MovingWindowRateLimiter(MemoryStorage()), item
 
 
 class RateLimitMiddleware:
-    """按已验证身份或 client IP 做 RPM 限流。"""
+    """按已验证身份或 client IP 做 RPM 限流（limits Moving Window）。"""
 
     _SKIP_PREFIXES = (
         "/health/",
@@ -50,10 +50,23 @@ class RateLimitMiddleware:
     def __init__(self, app, settings: Settings | None = None):
         self.app = app
         self._settings = settings
-        self._buckets: dict[str, _MemoryBucket] = {}
+        self._limiter: MovingWindowRateLimiter | None = None
+        self._item: Any | None = None
+        self._limiter_backend: str | None = None
 
     def _settings_or_default(self) -> Settings:
         return self._settings or get_settings()
+
+    def _ensure_limiter(self, settings: Settings) -> tuple[MovingWindowRateLimiter, Any]:
+        backend = settings.rate_limit_backend
+        if (
+            self._limiter is None
+            or self._item is None
+            or self._limiter_backend != backend
+        ):
+            self._limiter, self._item = _build_limiter(settings)
+            self._limiter_backend = backend
+        return self._limiter, self._item
 
     def _rate_key(self, request: Request) -> str:
         identity = getattr(request.state, "identity", None)
@@ -63,18 +76,6 @@ class RateLimitMiddleware:
             return f"tenant:{identity.tenant_id}"
         client = request.client.host if request.client else "unknown"
         return f"ip:{client}"
-
-    async def _allow_redis(self, redis: Any, key: str, rpm: int) -> bool:
-        window_key = f"memory:rl:{key}:{int(time.time()) // 60}"
-        try:
-            count = await redis.incr(window_key)
-            if count == 1:
-                await redis.expire(window_key, 120)
-            return int(count) <= rpm
-        except Exception as e:  # noqa: BLE001
-            logger.warning("redis rate limit failed (memory fallback): %s", e)
-            bucket = self._buckets.setdefault(key, _MemoryBucket(rpm))
-            return await bucket.allow()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -88,21 +89,14 @@ class RateLimitMiddleware:
         ):
             await self.app(scope, receive, send)
             return
-        rpm = max(1, int(settings.rate_limit_rpm))
-        key = self._rate_key(request)
-        allowed = True
-        if settings.rate_limit_backend == "redis":
-            from memory_app.deps import app_state
 
-            redis = app_state.clients.redis_client if app_state else None
-            if redis is not None:
-                allowed = await self._allow_redis(redis, key, rpm)
-            else:
-                bucket = self._buckets.setdefault(key, _MemoryBucket(rpm))
-                allowed = await bucket.allow()
-        else:
-            bucket = self._buckets.setdefault(key, _MemoryBucket(rpm))
-            allowed = await bucket.allow()
+        limiter, item = self._ensure_limiter(settings)
+        key = self._rate_key(request)
+        try:
+            allowed = await limiter.hit(item, key)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("rate limit check failed (allow): %s", e)
+            allowed = True
         if not allowed:
             response = JSONResponse(
                 status_code=429,
